@@ -3,7 +3,7 @@
 ## Overview
 
 Total Phases: 6
-Current Phase: 1 of 6
+Current Phase: 5 of 6
 Status: In Progress
 
 ## Phases
@@ -54,10 +54,10 @@ Dependencies: Phase 2, Phase 3
 
 ### Phase 5: Desktop UI
 **Goal:** Build the 5 Electron screens (setup, upload, scan progress, draft review, schedule management) with real-time progress updates and settings persistence.
-**Status:** Not Started
+**Status:** In Progress
 
 Plans:
-- [ ] 05-01: Setup and upload screens
+- [x] 05-01: Setup and upload screens
 - [ ] 05-02: Scan progress, draft review, and schedule screens
 
 Dependencies: Phase 3, Phase 4
@@ -84,7 +84,7 @@ Dependencies: Phase 4, Phase 5
 | 2 | Image Processing & Annotation Pipeline | 1/1 | Complete | - |
 | 3 | Google Integration (OAuth, Sheets, Drive) | 1/1 | Complete | - |
 | 4 | AI Email Generation | 1/1 | Complete | - |
-| 5 | Desktop UI | 0/2 | Not Started | - |
+| 5 | Desktop UI | 1/2 | In Progress | - |
 | 6 | Email Scheduler & Integration Testing | 0/2 | Not Started | - |
 
 ## Notes
