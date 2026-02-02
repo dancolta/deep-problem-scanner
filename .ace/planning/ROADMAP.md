@@ -21,10 +21,10 @@ Dependencies: None
 
 ### Phase 2: Image Processing & Annotation Pipeline
 **Goal:** Build the Gemini Vision integration for detecting annotation coordinates, Sharp-based drawing of red boxes/labels on screenshots, and PNG compression pipeline to meet <100KB limit.
-**Status:** Not Started
+**Status:** Complete
 
 Plans:
-- [ ] 02-01: Annotation detection and image processing
+- [x] 02-01: Annotation detection and image processing
 
 Dependencies: Phase 1
 
@@ -81,7 +81,7 @@ Dependencies: Phase 4, Phase 5
 | Phase | Name | Plans | Status | Duration |
 |-------|------|-------|--------|----------|
 | 1 | Project Foundation & Core Scanning Engine | 1/1 | Complete | - |
-| 2 | Image Processing & Annotation Pipeline | 0/1 | Not Started | - |
+| 2 | Image Processing & Annotation Pipeline | 1/1 | Complete | - |
 | 3 | Google Integration (OAuth, Sheets, Drive) | 0/1 | Not Started | - |
 | 4 | AI Email Generation | 0/1 | Not Started | - |
 | 5 | Desktop UI | 0/2 | Not Started | - |
