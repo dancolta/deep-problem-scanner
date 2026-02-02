@@ -111,11 +111,11 @@ export class GmailService {
             userId: 'me',
             id: draft.id,
             format: 'metadata',
-            metadataHeaders: ['Subject'],
           });
 
-          const subjectHeader = detail.data.message?.payload?.headers?.find(
-            (h) => h.name?.toLowerCase() === 'subject'
+          const headers = (detail as any).data?.message?.payload?.headers || [];
+          const subjectHeader = headers.find(
+            (h: { name?: string; value?: string }) => h.name?.toLowerCase() === 'subject'
           );
 
           results.push({

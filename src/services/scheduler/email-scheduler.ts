@@ -11,7 +11,7 @@ export class EmailScheduler {
   private timer: NodeJS.Timeout | null = null;
   private running = false;
   private config: SchedulerConfig;
-  private onEvent?: (event: SchedulerEvent) => void;
+  public onEvent?: (event: SchedulerEvent) => void;
 
   constructor(
     config: SchedulerConfig,
