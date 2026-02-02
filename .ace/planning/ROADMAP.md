@@ -69,7 +69,7 @@ Dependencies: Phase 3, Phase 4
 **Status:** Not Started
 
 Plans:
-- [ ] 06-01: Scheduler service and Gmail draft creation
+- [x] 06-01: Scheduler service and Gmail draft creation
 - [ ] 06-02: End-to-end integration and testing
 
 Dependencies: Phase 4, Phase 5
@@ -85,7 +85,7 @@ Dependencies: Phase 4, Phase 5
 | 3 | Google Integration (OAuth, Sheets, Drive) | 1/1 | Complete | - |
 | 4 | AI Email Generation | 1/1 | Complete | - |
 | 5 | Desktop UI | 2/2 | Complete | - |
-| 6 | Email Scheduler & Integration Testing | 0/2 | Not Started | - |
+| 6 | Email Scheduler & Integration Testing | 1/2 | In Progress | - |
 
 ## Notes
 
