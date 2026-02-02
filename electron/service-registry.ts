@@ -6,6 +6,9 @@ import { DriveService } from '../src/services/google/drive';
 import { EmailGenerator } from '../src/services/email/email-generator';
 import { LeadPipeline } from '../src/services/csv/lead-pipeline';
 import { CsvParser } from '../src/services/csv/csv-parser';
+import { GmailService } from '../src/services/google/gmail';
+import { EmailScheduler } from '../src/services/scheduler/email-scheduler';
+import type { SchedulerConfig } from '../src/services/scheduler/types';
 
 export class ServiceRegistry {
   private static instance: ServiceRegistry;
@@ -15,6 +18,7 @@ export class ServiceRegistry {
   private _googleAuth: GoogleAuthService | null = null;
   private _emailGenerator: EmailGenerator | null = null;
   private _csvParser: CsvParser | null = null;
+  private _scheduler: EmailScheduler | null = null;
 
   private constructor() {}
 
@@ -75,6 +79,22 @@ export class ServiceRegistry {
   async getDrive(): Promise<DriveService> {
     const client = await this.googleAuth.getAuthenticatedClient();
     return new DriveService(client);
+  }
+
+  async getAuthenticatedGmail(): Promise<GmailService> {
+    const client = await this.googleAuth.getAuthenticatedClient();
+    return new GmailService(client);
+  }
+
+  getScheduler(config?: SchedulerConfig): EmailScheduler {
+    if (!this._scheduler) {
+      this._scheduler = new EmailScheduler(config ?? {
+        intervalMinutes: 15,
+        timezone: 'UTC',
+        maxRetries: 3,
+      });
+    }
+    return this._scheduler;
   }
 
   getLeadPipeline(sheets?: SheetsService): LeadPipeline {

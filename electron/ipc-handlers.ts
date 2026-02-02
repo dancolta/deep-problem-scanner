@@ -239,25 +239,67 @@ export function registerAllHandlers(): void {
     }
   );
 
-  // --- Gmail (Phase 6 placeholders) ---
-  ipcMain.handle(IPC_CHANNELS.GMAIL_CREATE_DRAFT, async () => {
-    return { success: false, error: 'Not implemented yet — coming in Phase 6' };
-  });
-  ipcMain.handle(IPC_CHANNELS.GMAIL_SEND, async () => {
-    return { success: false, error: 'Not implemented yet — coming in Phase 6' };
+  // --- Gmail ---
+  ipcMain.handle(IPC_CHANNELS.GMAIL_CREATE_DRAFT, async (_event, args: any) => {
+    try {
+      const gmail = await registry.getAuthenticatedGmail();
+      const result = await gmail.createDraft(args.draft);
+      return { success: true, ...result };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
   });
 
-  // --- Scheduler (Phase 6 placeholders) ---
+  ipcMain.handle(IPC_CHANNELS.GMAIL_SEND, async (_event, args: any) => {
+    try {
+      const gmail = await registry.getAuthenticatedGmail();
+      const result = await gmail.sendDraft(args.draftId);
+      return { success: true, ...result };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
+  });
+
+  // --- Scheduler ---
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_START, async () => {
-    return { success: false, error: 'Not implemented yet — coming in Phase 6' };
+    try {
+      const scheduler = registry.getScheduler();
+      const gmail = await registry.getAuthenticatedGmail();
+      // Set event callback to forward to renderer
+      scheduler.onEvent = (event) => {
+        const wins = BrowserWindow.getAllWindows();
+        wins.forEach(w => w.webContents.send(IPC_CHANNELS.SCHEDULER_PROGRESS, event));
+      };
+      // Load approved/scheduled emails from Sheet if available
+      // Add to queue and start
+      scheduler.start();
+      return { success: true, status: scheduler.getStatus() };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
   });
+
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_STOP, async () => {
-    return { success: false, error: 'Not implemented yet — coming in Phase 6' };
+    try {
+      const scheduler = registry.getScheduler();
+      scheduler.stop();
+      return { success: true, status: scheduler.getStatus() };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
   });
+
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_STATUS, async () => {
-    return { success: false, error: 'Not implemented yet — coming in Phase 6' };
+    try {
+      const scheduler = registry.getScheduler();
+      return { success: true, status: scheduler.getStatus() };
+    } catch (error) {
+      return { success: false, error: String(error) };
+    }
   });
+
+  // SCHEDULER_PROGRESS is a renderer-bound event (sent via webContents.send), not a handle
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_PROGRESS, async () => {
-    return { success: false, error: 'Not implemented yet — coming in Phase 6' };
+    return { success: true, message: 'Progress events are pushed to renderer via webContents.send' };
   });
 }
