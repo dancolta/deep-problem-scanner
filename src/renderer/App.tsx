@@ -1,5 +1,6 @@
 import React from 'react';
 import { Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import SetupPage from './pages/SetupPage';
 import UploadPage from './pages/UploadPage';
 import ScanPage from './pages/ScanPage';
@@ -38,6 +39,7 @@ export default function App() {
         </ul>
       </nav>
       <main className="content">
+        <ErrorBoundary>
         <Routes>
           <Route path="/" element={<Navigate to="/setup" replace />} />
           <Route path="/setup" element={<SetupPage />} />
@@ -46,6 +48,7 @@ export default function App() {
           <Route path="/drafts" element={<DraftsPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
         </Routes>
+        </ErrorBoundary>
       </main>
     </div>
   );
