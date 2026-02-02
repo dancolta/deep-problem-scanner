@@ -213,6 +213,8 @@ export default function SetupPage() {
               ? 'Error - Try Again'
               : 'Save Settings'}
       </button>
+
+      <p className="version-text">Deep Problem Scanner v1.0.0</p>
     </div>
   );
 }

@@ -5,6 +5,14 @@ import { registerAllHandlers } from "./ipc-handlers";
 
 config();
 
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', reason);
+});
+
+process.on('uncaughtException', (error) => {
+  console.error('[uncaughtException]', error);
+});
+
 const isDev = !app.isPackaged;
 
 let mainWindow: BrowserWindow | null = null;
@@ -33,6 +41,7 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  console.log(`Deep Problem Scanner v${app.getVersion()}`);
   registerAllHandlers();
   createWindow();
 });
