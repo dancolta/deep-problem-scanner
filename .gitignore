@@ -1,0 +1,11 @@
+node_modules/
+dist/
+build/
+.env
+*.pem
+*.log
+.DS_Store
+thumbs.db
+tokens/
+screenshots/
+temp/
