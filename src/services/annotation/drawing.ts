@@ -2,24 +2,31 @@ import sharp from 'sharp';
 import { AnnotationCoord, AnnotationSeverity } from './types';
 
 // ============================================================================
-// STRICT ANNOTATION RULES
+// STRICT ANNOTATION RULES (v2)
 // ============================================================================
-// 1. Card has FIXED MAX WIDTH (280px) - text MUST wrap within this
+// 1. Card has FIXED MAX WIDTH - text MUST wrap within this
 // 2. Text ALWAYS stays inside the card - never overflow
 // 3. Long text wraps to multiple lines, card height adjusts
 // 4. Arrow is ALWAYS a straight line (never curved)
-// 5. Arrow points EXACTLY to target element center
+// 5. Arrow points EXACTLY to target element CENTER
 // 6. Arrow starts from card EDGE (not inside card)
 // 7. Badge is ABOVE card, never overlapping
+// 8. **NEW** Card NEVER overlaps with target element - strict check
+// 9. **NEW** Sizes increased by 20% for better visibility
 // ============================================================================
 
 const ANNOTATION_COLOR = '#dc2626'; // Red for all annotations
-const CARD_MAX_WIDTH = 280; // Fixed max width
-const CARD_PADDING = 14;
-const LABEL_FONT_SIZE = 14;
-const IMPACT_FONT_SIZE = 11;
-const LINE_HEIGHT = 18;
-const CHAR_WIDTH = 7.5; // Approximate pixels per character at 14px font
+
+// Sizes increased by 20%
+const CARD_MAX_WIDTH = 336; // Was 280, now 336 (+20%)
+const CARD_PADDING = 17; // Was 14, now ~17 (+20%)
+const LABEL_FONT_SIZE = 17; // Was 14, now ~17 (+20%)
+const IMPACT_FONT_SIZE = 13; // Was 11, now ~13 (+20%)
+const LINE_HEIGHT = 22; // Was 18, now ~22 (+20%)
+const CHAR_WIDTH = 9; // Was 7.5, now 9 (+20%)
+const BADGE_RADIUS = 13; // Was 11, now ~13 (+20%)
+const ARROW_WIDTH = 2.5; // Was 2, now 2.5 (+25%)
+const ARROW_HEAD_SIZE = 12; // Was 10, now 12 (+20%)
 
 function escapeXml(text: string): string {
   return text
@@ -66,6 +73,22 @@ function clampAnnotation(
   return { ...ann, x, y, width, height };
 }
 
+/**
+ * Check if two rectangles overlap
+ */
+function rectsOverlap(
+  r1: { x: number; y: number; w: number; h: number },
+  r2: { x: number; y: number; w: number; h: number },
+  padding: number = 10
+): boolean {
+  return !(
+    r1.x + r1.w + padding < r2.x ||
+    r2.x + r2.w + padding < r1.x ||
+    r1.y + r1.h + padding < r2.y ||
+    r2.y + r2.h + padding < r1.y
+  );
+}
+
 function buildAnnotationSvg(
   ann: AnnotationCoord,
   index: number,
@@ -75,9 +98,17 @@ function buildAnnotationSvg(
   const clamped = clampAnnotation(ann, imgWidth, imgHeight);
   const parts: string[] = [];
 
+  // TARGET ELEMENT bounds (the element with the issue)
+  const targetRect = {
+    x: clamped.x,
+    y: clamped.y,
+    w: clamped.width,
+    h: clamped.height,
+  };
+
   // TARGET POINT - exact center of the element with issue
-  const targetX = clamped.x + clamped.width / 2;
-  const targetY = clamped.y + clamped.height / 2;
+  const targetCenterX = clamped.x + clamped.width / 2;
+  const targetCenterY = clamped.y + clamped.height / 2;
 
   const label = clamped.label || '';
   const rawImpact = clamped.conversionImpact || '';
@@ -85,73 +116,94 @@ function buildAnnotationSvg(
   if (label.length === 0) return '';
 
   // ========== TEXT WRAPPING ==========
-  // Calculate max characters per line based on fixed width
-  const textAreaWidth = CARD_MAX_WIDTH - CARD_PADDING * 2 - 10; // Account for left accent
+  const textAreaWidth = CARD_MAX_WIDTH - CARD_PADDING * 2 - 12; // Account for left accent
   const maxCharsPerLine = Math.floor(textAreaWidth / CHAR_WIDTH);
 
-  // Wrap label text
   const labelLines = wrapText(label, maxCharsPerLine);
-
-  // Wrap impact text (slightly smaller font)
   const impactLines = rawImpact
     ? wrapText(rawImpact, Math.floor(textAreaWidth / (CHAR_WIDTH * 0.85)))
     : [];
 
   // ========== CALCULATE CARD DIMENSIONS ==========
   const boxWidth = CARD_MAX_WIDTH;
-  let boxHeight = CARD_PADDING * 2; // Top and bottom padding
-  boxHeight += labelLines.length * LINE_HEIGHT; // Label lines
+  let boxHeight = CARD_PADDING * 2;
+  boxHeight += labelLines.length * LINE_HEIGHT;
   if (impactLines.length > 0) {
-    boxHeight += 8; // Gap between label and impact
-    boxHeight += impactLines.length * (LINE_HEIGHT - 4); // Impact lines (smaller)
+    boxHeight += 10; // Gap
+    boxHeight += impactLines.length * (LINE_HEIGHT - 4);
   }
 
-  // ========== POSITION CARD ==========
-  // Try positions in order: top-right, top-left, bottom-right, bottom-left
-  let boxX: number;
-  let boxY: number;
+  // ========== POSITION CARD (NEVER overlap target) ==========
+  const edgeMargin = 25;
+  const minGap = 20; // Minimum gap between card and target
 
-  const margin = 60; // Distance from target
-  const edgeMargin = 20; // Distance from image edge
+  // Try 4 positions in order of preference, pick first that doesn't overlap
+  const positions: Array<{ x: number; y: number; name: string }> = [];
 
-  // Determine best position based on target location
-  const targetInLeftHalf = targetX < imgWidth / 2;
-  const targetInTopHalf = targetY < imgHeight / 2;
+  // Position 1: Right of target
+  positions.push({
+    x: targetRect.x + targetRect.w + minGap,
+    y: Math.max(edgeMargin, targetCenterY - boxHeight / 2),
+    name: 'right',
+  });
 
-  if (targetInLeftHalf) {
-    // Target is on left, place card on right
-    boxX = targetX + margin;
-  } else {
-    // Target is on right, place card on left
-    boxX = targetX - boxWidth - margin;
+  // Position 2: Left of target
+  positions.push({
+    x: targetRect.x - boxWidth - minGap,
+    y: Math.max(edgeMargin, targetCenterY - boxHeight / 2),
+    name: 'left',
+  });
+
+  // Position 3: Above target
+  positions.push({
+    x: Math.max(edgeMargin, targetCenterX - boxWidth / 2),
+    y: targetRect.y - boxHeight - minGap,
+    name: 'above',
+  });
+
+  // Position 4: Below target
+  positions.push({
+    x: Math.max(edgeMargin, targetCenterX - boxWidth / 2),
+    y: targetRect.y + targetRect.h + minGap,
+    name: 'below',
+  });
+
+  let boxX = positions[0].x;
+  let boxY = positions[0].y;
+
+  // Find first position that doesn't overlap with target
+  for (const pos of positions) {
+    // Clamp to image bounds first
+    const clampedX = Math.max(edgeMargin, Math.min(pos.x, imgWidth - boxWidth - edgeMargin));
+    const clampedY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(pos.y, imgHeight - boxHeight - edgeMargin));
+
+    const cardRect = { x: clampedX, y: clampedY, w: boxWidth, h: boxHeight };
+
+    if (!rectsOverlap(cardRect, targetRect, minGap)) {
+      boxX = clampedX;
+      boxY = clampedY;
+      break;
+    }
   }
 
-  if (targetInTopHalf) {
-    // Target is in top, place card below or at same level
-    boxY = targetY + margin / 2;
-  } else {
-    // Target is in bottom, place card above
-    boxY = targetY - boxHeight - margin;
-  }
-
-  // Clamp to image bounds
+  // Final clamp to ensure within bounds
   boxX = Math.max(edgeMargin, Math.min(boxX, imgWidth - boxWidth - edgeMargin));
-  boxY = Math.max(edgeMargin + 20, Math.min(boxY, imgHeight - boxHeight - edgeMargin));
+  boxY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(boxY, imgHeight - boxHeight - edgeMargin));
 
   // ========== 1. DRAW CARD ==========
   parts.push(
     `<rect x="${boxX}" y="${boxY}" width="${boxWidth}" height="${boxHeight}" ` +
-      `fill="white" stroke="#e5e7eb" stroke-width="1" rx="8" ry="8" filter="url(#shadow)" />`
+      `fill="white" stroke="#e5e7eb" stroke-width="1" rx="10" ry="10" filter="url(#shadow)" />`
   );
-  // Red left accent
+  // Red left accent (slightly thicker)
   parts.push(
-    `<rect x="${boxX}" y="${boxY + 4}" width="4" height="${boxHeight - 8}" ` +
+    `<rect x="${boxX}" y="${boxY + 5}" width="5" height="${boxHeight - 10}" ` +
       `fill="${ANNOTATION_COLOR}" rx="2" ry="2" />`
   );
 
   // ========== 2. DRAW TEXT (always inside card) ==========
   let textY = boxY + CARD_PADDING + LABEL_FONT_SIZE - 2;
-  const textX = boxX + 14;
+  const textX = boxX + 16;
 
   // Label lines (bold)
   for (const line of labelLines) {
@@ -165,7 +217,7 @@ function buildAnnotationSvg(
 
   // Impact lines (red, smaller)
   if (impactLines.length > 0) {
-    textY += 4; // Gap
+    textY += 6; // Gap
     for (const line of impactLines) {
       const escapedLine = escapeXml(line);
       parts.push(
@@ -177,64 +229,58 @@ function buildAnnotationSvg(
   }
 
   // ========== 3. DRAW BADGE (above card, never overlapping) ==========
-  const badgeRadius = 11;
-  const badgeX = boxX + boxWidth - badgeRadius - 6;
-  const badgeY = boxY - badgeRadius - 6;
+  const badgeX = boxX + boxWidth - BADGE_RADIUS - 8;
+  const badgeY = boxY - BADGE_RADIUS - 8;
 
   parts.push(
-    `<circle cx="${badgeX}" cy="${badgeY}" r="${badgeRadius}" fill="${ANNOTATION_COLOR}" />`,
-    `<text x="${badgeX}" y="${badgeY + 4}" text-anchor="middle" ` +
-      `font-family="Arial, Helvetica, sans-serif" font-size="12" font-weight="bold" fill="white">${index + 1}</text>`
+    `<circle cx="${badgeX}" cy="${badgeY}" r="${BADGE_RADIUS}" fill="${ANNOTATION_COLOR}" />`,
+    `<text x="${badgeX}" y="${badgeY + 5}" text-anchor="middle" ` +
+      `font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold" fill="white">${index + 1}</text>`
   );
 
-  // ========== 4. DRAW STRAIGHT ARROW ==========
-  // Arrow starts from card edge closest to target
-  // Arrow ends at target center
-
-  // Determine which edge of card to start from
-  const cardCenterX = boxX + boxWidth / 2;
-  const cardCenterY = boxY + boxHeight / 2;
+  // ========== 4. DRAW STRAIGHT ARROW TO EXACT TARGET CENTER ==========
+  // Arrow starts from card edge closest to target CENTER
+  // Arrow ends EXACTLY at target element center
 
   let arrowStartX: number;
   let arrowStartY: number;
 
-  // Find the card edge point closest to target
-  if (targetX < boxX) {
-    // Target is to the left of card
+  // Determine which edge of card to start from based on target center position
+  if (targetCenterX < boxX) {
+    // Target center is to the left of card - start from left edge
     arrowStartX = boxX;
-    arrowStartY = Math.max(boxY + 10, Math.min(targetY, boxY + boxHeight - 10));
-  } else if (targetX > boxX + boxWidth) {
-    // Target is to the right of card
+    arrowStartY = Math.max(boxY + 15, Math.min(targetCenterY, boxY + boxHeight - 15));
+  } else if (targetCenterX > boxX + boxWidth) {
+    // Target center is to the right of card - start from right edge
     arrowStartX = boxX + boxWidth;
-    arrowStartY = Math.max(boxY + 10, Math.min(targetY, boxY + boxHeight - 10));
-  } else if (targetY < boxY) {
-    // Target is above card
-    arrowStartX = Math.max(boxX + 10, Math.min(targetX, boxX + boxWidth - 10));
+    arrowStartY = Math.max(boxY + 15, Math.min(targetCenterY, boxY + boxHeight - 15));
+  } else if (targetCenterY < boxY) {
+    // Target center is above card - start from top edge
+    arrowStartX = Math.max(boxX + 15, Math.min(targetCenterX, boxX + boxWidth - 15));
     arrowStartY = boxY;
   } else {
-    // Target is below card
-    arrowStartX = Math.max(boxX + 10, Math.min(targetX, boxX + boxWidth - 10));
+    // Target center is below card - start from bottom edge
+    arrowStartX = Math.max(boxX + 15, Math.min(targetCenterX, boxX + boxWidth - 15));
     arrowStartY = boxY + boxHeight;
   }
 
-  // STRAIGHT LINE from card edge to target
+  // STRAIGHT LINE from card edge to EXACT target center
   parts.push(
-    `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${targetX}" y2="${targetY}" ` +
-      `stroke="${ANNOTATION_COLOR}" stroke-width="2" />`
+    `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${targetCenterX}" y2="${targetCenterY}" ` +
+      `stroke="${ANNOTATION_COLOR}" stroke-width="${ARROW_WIDTH}" />`
   );
 
-  // ARROWHEAD pointing at target
-  const angle = Math.atan2(targetY - arrowStartY, targetX - arrowStartX);
-  const arrowSize = 10;
+  // ARROWHEAD pointing EXACTLY at target center
+  const angle = Math.atan2(targetCenterY - arrowStartY, targetCenterX - arrowStartX);
   const arrowAngle = Math.PI / 6; // 30 degrees
 
-  const ax1 = targetX - arrowSize * Math.cos(angle - arrowAngle);
-  const ay1 = targetY - arrowSize * Math.sin(angle - arrowAngle);
-  const ax2 = targetX - arrowSize * Math.cos(angle + arrowAngle);
-  const ay2 = targetY - arrowSize * Math.sin(angle + arrowAngle);
+  const ax1 = targetCenterX - ARROW_HEAD_SIZE * Math.cos(angle - arrowAngle);
+  const ay1 = targetCenterY - ARROW_HEAD_SIZE * Math.sin(angle - arrowAngle);
+  const ax2 = targetCenterX - ARROW_HEAD_SIZE * Math.cos(angle + arrowAngle);
+  const ay2 = targetCenterY - ARROW_HEAD_SIZE * Math.sin(angle + arrowAngle);
 
   parts.push(
-    `<polygon points="${targetX},${targetY} ${ax1},${ay1} ${ax2},${ay2}" fill="${ANNOTATION_COLOR}" />`
+    `<polygon points="${targetCenterX},${targetCenterY} ${ax1},${ay1} ${ax2},${ay2}" fill="${ANNOTATION_COLOR}" />`
   );
 
   return parts.join('\n  ');
