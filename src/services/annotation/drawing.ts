@@ -2,20 +2,37 @@ import sharp from 'sharp';
 import { AnnotationCoord, AnnotationSeverity } from './types';
 
 // ============================================================================
-// STRICT ANNOTATION RULES (v2)
+// STRICT ANNOTATION RULES (v3)
 // ============================================================================
-// 1. Card has FIXED MAX WIDTH - text MUST wrap within this
-// 2. Text ALWAYS stays inside the card - never overflow
-// 3. Long text wraps to multiple lines, card height adjusts
-// 4. Arrow is ALWAYS a straight line (never curved)
-// 5. Arrow points EXACTLY to target element CENTER
-// 6. Arrow starts from card EDGE (not inside card)
-// 7. Badge is ABOVE card, never overlapping
-// 8. **NEW** Card NEVER overlaps with target element - strict check
-// 9. **NEW** Sizes increased by 20% for better visibility
+// WHAT WE DRAW:
+// 1. Callout card (white bg, gray border, red left accent)
+// 2. Straight arrow from card edge to target center
+// 3. Numbered badge above card
+//
+// WHAT WE DO NOT DRAW:
+// - NO rectangles around target elements
+// - NO dashed boxes
+// - NO highlighting boxes
+//
+// ARROW RULES:
+// - Length: 50-150px MAXIMUM (ideal: 80-120px)
+// - Style: ALWAYS straight line (never curved)
+// - Points EXACTLY to target element center
+// - Starts from card EDGE (not inside card)
+//
+// CARD RULES:
+// - FIXED MAX WIDTH (336px) - text wraps within
+// - Card NEVER overlaps target element
+// - Badge positioned ABOVE card
+// - Sizes increased by 20% for visibility
 // ============================================================================
 
 const ANNOTATION_COLOR = '#dc2626'; // Red for all annotations
+
+// Arrow length constraints - STRICT enforcement
+const ARROW_MIN_LENGTH = 50;
+const ARROW_MAX_LENGTH = 150;
+const ARROW_IDEAL_LENGTH = 100; // Target 80-120px
 
 // Sizes increased by 20%
 const CARD_MAX_WIDTH = 336; // Was 280, now 336 (+20%)
@@ -89,6 +106,13 @@ function rectsOverlap(
   );
 }
 
+/**
+ * Calculate distance between two points
+ */
+function distance(x1: number, y1: number, x2: number, y2: number): number {
+  return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+}
+
 function buildAnnotationSvg(
   ann: AnnotationCoord,
   index: number,
@@ -133,57 +157,101 @@ function buildAnnotationSvg(
     boxHeight += impactLines.length * (LINE_HEIGHT - 4);
   }
 
-  // ========== POSITION CARD (NEVER overlap target) ==========
+  // ========== POSITION CARD (enforce arrow length 50-150px, prefer 80-120px) ==========
   const edgeMargin = 25;
-  const minGap = 20; // Minimum gap between card and target
 
-  // Try 4 positions in order of preference, pick first that doesn't overlap
-  const positions: Array<{ x: number; y: number; name: string }> = [];
+  // Try multiple positions and distances, pick best arrow length
+  type CandidatePosition = {
+    x: number;
+    y: number;
+    arrowLength: number;
+    arrowStartX: number;
+    arrowStartY: number;
+    name: string;
+  };
 
-  // Position 1: Right of target
-  positions.push({
-    x: targetRect.x + targetRect.w + minGap,
-    y: Math.max(edgeMargin, targetCenterY - boxHeight / 2),
-    name: 'right',
-  });
+  const candidates: CandidatePosition[] = [];
 
-  // Position 2: Left of target
-  positions.push({
-    x: targetRect.x - boxWidth - minGap,
-    y: Math.max(edgeMargin, targetCenterY - boxHeight / 2),
-    name: 'left',
-  });
+  // Try gaps from small to large to find optimal arrow length
+  const gapsToTry = [30, 50, 70, 90, 110, 130];
 
-  // Position 3: Above target
-  positions.push({
-    x: Math.max(edgeMargin, targetCenterX - boxWidth / 2),
-    y: targetRect.y - boxHeight - minGap,
-    name: 'above',
-  });
-
-  // Position 4: Below target
-  positions.push({
-    x: Math.max(edgeMargin, targetCenterX - boxWidth / 2),
-    y: targetRect.y + targetRect.h + minGap,
-    name: 'below',
-  });
-
-  let boxX = positions[0].x;
-  let boxY = positions[0].y;
-
-  // Find first position that doesn't overlap with target
-  for (const pos of positions) {
-    // Clamp to image bounds first
-    const clampedX = Math.max(edgeMargin, Math.min(pos.x, imgWidth - boxWidth - edgeMargin));
-    const clampedY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(pos.y, imgHeight - boxHeight - edgeMargin));
-
-    const cardRect = { x: clampedX, y: clampedY, w: boxWidth, h: boxHeight };
-
-    if (!rectsOverlap(cardRect, targetRect, minGap)) {
-      boxX = clampedX;
-      boxY = clampedY;
-      break;
+  for (const gap of gapsToTry) {
+    // Right of target
+    const rightX = targetRect.x + targetRect.w + gap;
+    const rightY = Math.max(edgeMargin, targetCenterY - boxHeight / 2);
+    const rightClampedX = Math.max(edgeMargin, Math.min(rightX, imgWidth - boxWidth - edgeMargin));
+    const rightClampedY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(rightY, imgHeight - boxHeight - edgeMargin));
+    const rightArrowStartX = rightClampedX;
+    const rightArrowStartY = Math.max(rightClampedY + 15, Math.min(targetCenterY, rightClampedY + boxHeight - 15));
+    const rightArrowLen = distance(rightArrowStartX, rightArrowStartY, targetCenterX, targetCenterY);
+    const rightCardRect = { x: rightClampedX, y: rightClampedY, w: boxWidth, h: boxHeight };
+    if (!rectsOverlap(rightCardRect, targetRect, 10) && rightArrowLen >= ARROW_MIN_LENGTH && rightArrowLen <= ARROW_MAX_LENGTH) {
+      candidates.push({ x: rightClampedX, y: rightClampedY, arrowLength: rightArrowLen, arrowStartX: rightArrowStartX, arrowStartY: rightArrowStartY, name: 'right' });
     }
+
+    // Left of target
+    const leftX = targetRect.x - boxWidth - gap;
+    const leftY = Math.max(edgeMargin, targetCenterY - boxHeight / 2);
+    const leftClampedX = Math.max(edgeMargin, Math.min(leftX, imgWidth - boxWidth - edgeMargin));
+    const leftClampedY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(leftY, imgHeight - boxHeight - edgeMargin));
+    const leftArrowStartX = leftClampedX + boxWidth;
+    const leftArrowStartY = Math.max(leftClampedY + 15, Math.min(targetCenterY, leftClampedY + boxHeight - 15));
+    const leftArrowLen = distance(leftArrowStartX, leftArrowStartY, targetCenterX, targetCenterY);
+    const leftCardRect = { x: leftClampedX, y: leftClampedY, w: boxWidth, h: boxHeight };
+    if (!rectsOverlap(leftCardRect, targetRect, 10) && leftArrowLen >= ARROW_MIN_LENGTH && leftArrowLen <= ARROW_MAX_LENGTH) {
+      candidates.push({ x: leftClampedX, y: leftClampedY, arrowLength: leftArrowLen, arrowStartX: leftArrowStartX, arrowStartY: leftArrowStartY, name: 'left' });
+    }
+
+    // Above target
+    const aboveX = Math.max(edgeMargin, targetCenterX - boxWidth / 2);
+    const aboveY = targetRect.y - boxHeight - gap;
+    const aboveClampedX = Math.max(edgeMargin, Math.min(aboveX, imgWidth - boxWidth - edgeMargin));
+    const aboveClampedY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(aboveY, imgHeight - boxHeight - edgeMargin));
+    const aboveArrowStartX = Math.max(aboveClampedX + 15, Math.min(targetCenterX, aboveClampedX + boxWidth - 15));
+    const aboveArrowStartY = aboveClampedY + boxHeight;
+    const aboveArrowLen = distance(aboveArrowStartX, aboveArrowStartY, targetCenterX, targetCenterY);
+    const aboveCardRect = { x: aboveClampedX, y: aboveClampedY, w: boxWidth, h: boxHeight };
+    if (!rectsOverlap(aboveCardRect, targetRect, 10) && aboveArrowLen >= ARROW_MIN_LENGTH && aboveArrowLen <= ARROW_MAX_LENGTH) {
+      candidates.push({ x: aboveClampedX, y: aboveClampedY, arrowLength: aboveArrowLen, arrowStartX: aboveArrowStartX, arrowStartY: aboveArrowStartY, name: 'above' });
+    }
+
+    // Below target
+    const belowX = Math.max(edgeMargin, targetCenterX - boxWidth / 2);
+    const belowY = targetRect.y + targetRect.h + gap;
+    const belowClampedX = Math.max(edgeMargin, Math.min(belowX, imgWidth - boxWidth - edgeMargin));
+    const belowClampedY = Math.max(edgeMargin + BADGE_RADIUS + 10, Math.min(belowY, imgHeight - boxHeight - edgeMargin));
+    const belowArrowStartX = Math.max(belowClampedX + 15, Math.min(targetCenterX, belowClampedX + boxWidth - 15));
+    const belowArrowStartY = belowClampedY;
+    const belowArrowLen = distance(belowArrowStartX, belowArrowStartY, targetCenterX, targetCenterY);
+    const belowCardRect = { x: belowClampedX, y: belowClampedY, w: boxWidth, h: boxHeight };
+    if (!rectsOverlap(belowCardRect, targetRect, 10) && belowArrowLen >= ARROW_MIN_LENGTH && belowArrowLen <= ARROW_MAX_LENGTH) {
+      candidates.push({ x: belowClampedX, y: belowClampedY, arrowLength: belowArrowLen, arrowStartX: belowArrowStartX, arrowStartY: belowArrowStartY, name: 'below' });
+    }
+  }
+
+  // Sort candidates by distance from ideal arrow length (prefer 80-120px)
+  candidates.sort((a, b) => {
+    const aDistFromIdeal = Math.abs(a.arrowLength - ARROW_IDEAL_LENGTH);
+    const bDistFromIdeal = Math.abs(b.arrowLength - ARROW_IDEAL_LENGTH);
+    return aDistFromIdeal - bDistFromIdeal;
+  });
+
+  // Use best candidate, or fallback to a close position
+  let boxX: number;
+  let boxY: number;
+
+  if (candidates.length > 0) {
+    const best = candidates[0];
+    boxX = best.x;
+    boxY = best.y;
+    console.log(`[drawing] Best position: ${best.name}, arrow length: ${Math.round(best.arrowLength)}px`);
+  } else {
+    // Fallback: position close to target (right side preferred)
+    boxX = Math.min(targetRect.x + targetRect.w + 40, imgWidth - boxWidth - edgeMargin);
+    boxY = Math.max(edgeMargin + BADGE_RADIUS + 10, targetCenterY - boxHeight / 2);
+    boxX = Math.max(edgeMargin, boxX);
+    boxY = Math.min(boxY, imgHeight - boxHeight - edgeMargin);
+    console.log(`[drawing] Using fallback position (no valid candidates found)`);
   }
 
   // Final clamp to ensure within bounds

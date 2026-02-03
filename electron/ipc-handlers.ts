@@ -202,7 +202,8 @@ export function registerAllHandlers(): void {
             console.timeEnd(`[IPC] scan-${i}`);
 
             if (!session) {
-              results.push({ lead, scanStatus: 'FAILED', error: 'Could not open page' });
+              console.error(`[IPC] SCREENSHOT FAILURE: Could not open page for ${lead.website_url} - page load timeout or navigation error`);
+              results.push({ lead, scanStatus: 'FAILED', error: 'Could not open page - timeout or navigation error' });
               continue;
             }
 
@@ -243,6 +244,12 @@ export function registerAllHandlers(): void {
                 fallbacks,
                 combinedElementSelector || undefined
               );
+
+              if (!sectionCapture) {
+                console.error(`[IPC] SCREENSHOT FAILURE: Could not capture section "${section.section}" for ${lead.website_url}`);
+                console.error(`[IPC] Tried selectors: ${section.sectionSelector}, fallbacks: ${fallbacks.join(', ')}`);
+                continue;
+              }
 
               if (sectionCapture) {
                 // Use element bounds if found, otherwise smart fallback based on section type
@@ -296,6 +303,12 @@ export function registerAllHandlers(): void {
               }
 
               console.timeEnd(`[IPC] section-${section.section}`);
+            }
+
+            // Log if no screenshots were captured
+            if (sectionScreenshots.length === 0) {
+              console.error(`[IPC] WARNING: No section screenshots captured for ${lead.website_url}`);
+              console.error(`[IPC] Analysis found ${analysis.sections.length} issues but none could be captured`);
             }
 
             // Close the page session
