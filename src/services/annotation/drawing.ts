@@ -2,49 +2,44 @@ import sharp from 'sharp';
 import { AnnotationCoord, AnnotationSeverity } from './types';
 
 // ============================================================================
-// STRICT ANNOTATION RULES (v3)
+// ANNOTATION RULES (v4) - CARDS ONLY, NO ARROWS
 // ============================================================================
 // WHAT WE DRAW:
 // 1. Callout card (white bg, gray border, red left accent)
-// 2. Straight arrow from card edge to target center
-// 3. Numbered badge above card
+// 2. Numbered badge above card
 //
 // WHAT WE DO NOT DRAW:
+// - NO arrows (removed for cleaner look)
 // - NO rectangles around target elements
 // - NO dashed boxes
-// - NO highlighting boxes
 //
-// ARROW RULES:
-// - Length: 50-150px MAXIMUM (ideal: 80-120px)
-// - Style: ALWAYS straight line (never curved)
-// - Points EXACTLY to target element center
-// - Starts from card EDGE (not inside card)
+// SCREENSHOT PROCESSING:
+// - Darken screenshot by 20% so white cards pop
+// - Enhanced shadow on cards for visibility
 //
 // CARD RULES:
-// - FIXED MAX WIDTH (336px) - text wraps within
-// - Card NEVER overlaps target element
+// - FIXED MAX WIDTH (437px)
+// - Card NEVER overlaps target element (25px minimum gap)
 // - Badge positioned ABOVE card
-// - Sizes increased by 20% for visibility
+// - Cards positioned NEAR target element
 // ============================================================================
 
 const ANNOTATION_COLOR = '#dc2626'; // Red for all annotations
 
-// Arrow length constraints - STRICT enforcement
-const ARROW_MIN_LENGTH = 50;
-const ARROW_MAX_LENGTH = 150;
-const ARROW_IDEAL_LENGTH = 100; // Target 80-120px
+// Card positioning constraints (no arrows, but still need distance logic)
+const ARROW_MIN_LENGTH = 50;  // Minimum distance from target
+const ARROW_MAX_LENGTH = 150; // Maximum distance from target
+const ARROW_IDEAL_LENGTH = 100; // Ideal distance
 
-// Sizes increased by 50% total (20% + 30%)
-const CARD_MAX_WIDTH = 437; // 336 * 1.3
-const CARD_PADDING = 22; // 17 * 1.3
-const LABEL_FONT_SIZE = 22; // 17 * 1.3
-const IMPACT_FONT_SIZE = 17; // 13 * 1.3
-const LINE_HEIGHT = 29; // 22 * 1.3
-const CHAR_WIDTH = 12; // 9 * 1.3
-const BADGE_RADIUS = 17; // 13 * 1.3
-const BADGE_FONT_SIZE = 18; // 14 * 1.3
-const ARROW_WIDTH = 3; // Slightly thicker for larger card
-const ARROW_HEAD_SIZE = 14; // 12 * 1.15
+// Card sizes
+const CARD_MAX_WIDTH = 437;
+const CARD_PADDING = 22;
+const LABEL_FONT_SIZE = 22;
+const IMPACT_FONT_SIZE = 17;
+const LINE_HEIGHT = 29;
+const CHAR_WIDTH = 12;
+const BADGE_RADIUS = 17;
+const BADGE_FONT_SIZE = 18;
 
 function escapeXml(text: string): string {
   return text
@@ -361,82 +356,8 @@ function buildAnnotationSvg(
       `font-family="Arial, Helvetica, sans-serif" font-size="${BADGE_FONT_SIZE}" font-weight="bold" fill="white">${index + 1}</text>`
   );
 
-  // ========== 4. DRAW STRAIGHT ARROW - STRICT RULES ==========
-  // RULE: Arrow exits from the edge facing the target (based on chosenDirection)
-  // RULE: Arrow NEVER passes through the card body
-  // RULE: Arrow points to target center (or edge if closer)
-
-  const ARROW_MARGIN = 8;
-
-  let arrowStartX: number;
-  let arrowStartY: number;
-  let arrowEndX: number;
-  let arrowEndY: number;
-
-  // Use chosenDirection to determine arrow exit point
-  // This ensures arrow exits from the correct edge based on card placement
-  switch (chosenDirection) {
-    case 'right':
-      // Card is to the RIGHT of target, arrow exits from LEFT edge of card
-      arrowStartX = boxX;
-      arrowStartY = boxY + boxHeight / 2;
-      // Arrow points to right edge of target
-      arrowEndX = targetRect.x + targetRect.w + ARROW_MARGIN;
-      arrowEndY = Math.max(targetRect.y + 10, Math.min(arrowStartY, targetRect.y + targetRect.h - 10));
-      break;
-
-    case 'left':
-      // Card is to the LEFT of target, arrow exits from RIGHT edge of card
-      arrowStartX = boxX + boxWidth;
-      arrowStartY = boxY + boxHeight / 2;
-      // Arrow points to left edge of target
-      arrowEndX = targetRect.x - ARROW_MARGIN;
-      arrowEndY = Math.max(targetRect.y + 10, Math.min(arrowStartY, targetRect.y + targetRect.h - 10));
-      break;
-
-    case 'below':
-      // Card is BELOW target, arrow exits from TOP edge of card
-      arrowStartX = boxX + boxWidth / 2;
-      arrowStartY = boxY;
-      // Arrow points to bottom edge of target
-      arrowEndX = Math.max(targetRect.x + 10, Math.min(arrowStartX, targetRect.x + targetRect.w - 10));
-      arrowEndY = targetRect.y + targetRect.h + ARROW_MARGIN;
-      break;
-
-    case 'above':
-      // Card is ABOVE target, arrow exits from BOTTOM edge of card
-      arrowStartX = boxX + boxWidth / 2;
-      arrowStartY = boxY + boxHeight;
-      // Arrow points to top edge of target
-      arrowEndX = Math.max(targetRect.x + 10, Math.min(arrowStartX, targetRect.x + targetRect.w - 10));
-      arrowEndY = targetRect.y - ARROW_MARGIN;
-      break;
-  }
-
-  // SAFETY: Ensure arrow start is exactly on card edge (not inside)
-  arrowStartX = Math.max(boxX, Math.min(arrowStartX, boxX + boxWidth));
-  arrowStartY = Math.max(boxY, Math.min(arrowStartY, boxY + boxHeight));
-
-  console.log(`[drawing] Arrow: (${Math.round(arrowStartX)},${Math.round(arrowStartY)}) → (${Math.round(arrowEndX)},${Math.round(arrowEndY)}) [${chosenDirection}]`);
-
-  // STRAIGHT LINE from card edge to target edge (with margin)
-  parts.push(
-    `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" ` +
-      `stroke="${ANNOTATION_COLOR}" stroke-width="${ARROW_WIDTH}" />`
-  );
-
-  // ARROWHEAD pointing at target edge
-  const angle = Math.atan2(arrowEndY - arrowStartY, arrowEndX - arrowStartX);
-  const arrowAngle = Math.PI / 6; // 30 degrees
-
-  const ax1 = arrowEndX - ARROW_HEAD_SIZE * Math.cos(angle - arrowAngle);
-  const ay1 = arrowEndY - ARROW_HEAD_SIZE * Math.sin(angle - arrowAngle);
-  const ax2 = arrowEndX - ARROW_HEAD_SIZE * Math.cos(angle + arrowAngle);
-  const ay2 = arrowEndY - ARROW_HEAD_SIZE * Math.sin(angle + arrowAngle);
-
-  parts.push(
-    `<polygon points="${arrowEndX},${arrowEndY} ${ax1},${ay1} ${ax2},${ay2}" fill="${ANNOTATION_COLOR}" />`
-  );
+  // ========== NO ARROWS - CARDS ONLY ==========
+  // Arrows removed for cleaner look. Cards are positioned near their target elements.
 
   // Return SVG and placement info for collision tracking
   const placement: PlacedCard = {
@@ -444,10 +365,10 @@ function buildAnnotationSvg(
     y: boxY,
     w: boxWidth,
     h: boxHeight,
-    arrowStartX,
-    arrowStartY,
-    arrowEndX,
-    arrowEndY,
+    arrowStartX: boxX,
+    arrowStartY: boxY,
+    arrowEndX: boxX,
+    arrowEndY: boxY,
   };
 
   return { svg: parts.join('\n  '), placement };
@@ -469,6 +390,17 @@ export async function drawAnnotations(
 
   console.log(`[drawing] Image dimensions: ${imgWidth}x${imgHeight}, annotations: ${annotations.length}`);
 
+  // ========== STEP 1: DARKEN THE SCREENSHOT BY 20% ==========
+  // This makes the white cards pop more visibly
+  const darkenedBuffer = await sharp(realBuf)
+    .modulate({
+      brightness: 0.8, // 80% brightness = 20% darker
+    })
+    .toBuffer();
+
+  console.log(`[drawing] Screenshot darkened by 20%`);
+
+  // ========== STEP 2: BUILD ANNOTATION CARDS ==========
   // Track placed cards to avoid overlaps
   const placedCards: PlacedCard[] = [];
   const svgParts: string[] = [];
@@ -490,17 +422,19 @@ export async function drawAnnotations(
 
   const svgElements = svgParts.join('\n  ');
 
+  // Cards with enhanced shadow for better visibility on darkened background
   const svgString =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${imgHeight}">\n` +
     `  <defs>\n` +
-    `    <filter id="shadow" x="-10%" y="-10%" width="120%" height="130%">\n` +
-    `      <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.2" />\n` +
+    `    <filter id="shadow" x="-20%" y="-20%" width="140%" height="160%">\n` +
+    `      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-opacity="0.4" />\n` +
     `    </filter>\n` +
     `  </defs>\n` +
     `  ${svgElements}\n` +
     `</svg>`;
 
-  const annotatedBuffer = await sharp(realBuf)
+  // ========== STEP 3: COMPOSITE CARDS ON DARKENED SCREENSHOT ==========
+  const annotatedBuffer = await sharp(darkenedBuffer)
     .composite([
       {
         input: Buffer.from(svgString),
