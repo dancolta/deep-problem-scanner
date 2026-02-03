@@ -33,114 +33,184 @@ function buildAnalysisPrompt(
     .map((d) => `- ${d.name}: ${d.status} (score: ${d.score}/100) - ${d.details}`)
     .join('\n');
 
-  return `You are a senior CRO (Conversion Rate Optimization) expert. Analyze this homepage screenshot from ${url}.
+  return `You are a senior CRO (Conversion Rate Optimization) expert with autonomous decision-making authority. Analyze this homepage screenshot from ${url} and identify REAL conversion-killing issues.
 
 ## DIAGNOSTIC DATA
 ${diagnosticLines}
 
 ## YOUR MISSION
-Find 2-3 REAL conversion-killing issues on this page. Quality over quantity.
+Find 2-3 REAL, high-impact conversion issues that would make a prospect respond to a cold email. These must be issues the business owner will immediately recognize as revenue leaks.
 
-## STRICT RULES - READ CAREFULLY
+## ANALYSIS FRAMEWORK
+
+### PRIORITY 1: Revenue-Critical Issues (Always check first)
+1. **Missing/Broken CTA Above Fold**
+   - No clear primary action button visible without scrolling
+   - CTA button invisible (ghost style matching background)
+   - CTA text is generic: "Submit", "Click", "Go", "Learn More"
+   - Impact: "84% less engagement without CTA above fold"
+
+2. **Unclear Value Proposition**
+   - Headline doesn't explain what the business does
+   - Generic platitudes: "Welcome", "Solutions", "Innovation", "Your Partner"
+   - Visitor can't understand the offering in 5 seconds
+   - Impact: "Up to 50% bounce rate increase with generic headlines"
+
+3. **Zero Trust Signals**
+   - No client logos anywhere on homepage
+   - No testimonials, reviews, case studies, or ratings
+   - No "As Seen In" media mentions
+   - Trust elements use obvious stock photos
+   - Impact: "42% conversion lift when trust signals added"
+
+### PRIORITY 2: High-Friction Issues
+4. **Form Friction**
+   - Visible forms with >4 fields
+   - No indication which fields are required
+   - Missing privacy/security reassurance near form
+   - Impact: "Each extra field reduces conversions by 10%"
+
+5. **Navigation Overload**
+   - More than 8 top-level menu items
+   - Pricing or Contact info missing from navigation
+   - Impact: "Up to 50% higher bounce rate with cluttered navigation"
+
+6. **Hero Image/Video Problems**
+   - Generic stock photos that don't show product/service
+   - Auto-playing video without controls
+   - Hero image completely blocks headline/CTA
+
+### PRIORITY 3: Mobile & Performance Issues
+7. **Mobile Responsiveness Failures**
+   - Text cut off or overlapping on mobile
+   - Buttons too small to tap (<44px)
+   - Horizontal scrolling required
+
+8. **Page Speed Indicators**
+   - Lazy-loaded hero content (blank screen)
+   - Broken images in critical areas
+   - Layout shift pushing content down
+
+### PRIORITY 4: Credibility Killers
+9. **Outdated/Broken Elements**
+   - Copyright year more than 1 year old
+   - Broken images or placeholder text
+   - "Lorem ipsum" or template content visible
+   - SSL warning or "Not Secure" indicator
+
+10. **Inconsistent Branding**
+    - Multiple different CTAs competing (5+ different actions)
+    - Conflicting color schemes or fonts
+    - Unprofessional design that damages trust
+
+## STRICT SELECTION RULES
 
 ### ONLY FLAG IF:
-1. **Objectively measurable** - Not opinion, but clear UX/conversion problem
-2. **Visible in screenshot** - You can point to the exact element
-3. **Backed by data** - Use only the stats provided below
-4. **Different locations** - Each issue must be in a DIFFERENT area of the page (spread out for clear annotations)
+1. **Objectively measurable** - Clear UX/conversion problem, not subjective preference
+2. **Visible in screenshot** - You can identify the exact element
+3. **Backed by conversion data** - Reference the impact stats provided
+4. **Spatially distinct** - Each issue in a DIFFERENT section (hero vs. navigation vs. form)
+5. **Business impact** - Issue directly costs revenue/leads
+6. **Verifiable** - Business owner can immediately see it's true
 
 ### NEVER FLAG:
-- Stylistic preferences ("I'd make this blue")
-- Minor improvements ("headline could be stronger")
-- Things that exist but "could be better"
-- Multiple issues in the same area
+- Stylistic opinions ("This color would work better")
+- Minor polish ("Headline could be punchier")
+- Things that work but "could be optimized"
+- Multiple issues in the same 300px radius
+- Theoretical problems without visible evidence
+- Industry-standard patterns that work (e.g., top navigation)
+- Elements that ARE present (don't say "missing X" if X exists)
+- Subheadlines that exist (if there's explanatory text below headline, don't flag it)
+- Trust logos that are visible (if you see company logos, don't flag "no trust signals")
+- Solid colored buttons (don't call them "ghost" unless truly transparent)
 
-## ISSUE CATEGORIES
+## CRITICAL VERIFICATION STEP
 
-### 1. CTA PROBLEMS (section: "cta")
-**Flag ONLY if:**
-- Primary CTA button is MISSING from above the fold
-- Button is ghost/outline AND same color as background (invisible)
-- Button text is meaningless: "Submit", "Click", "Go"
-**Selector:** "a[href*='start'], a[href*='demo'], a[href*='contact'], button.primary, .btn-primary, [class*='cta']"
+Before flagging ANY issue, ask yourself:
+1. "Can I see this problem clearly in the screenshot?" - If NO, don't flag it
+2. "Is the element I'm flagging as missing actually missing?" - If it EXISTS, don't flag it
+3. "Would the business owner agree this is broken?" - If it's just preference, don't flag it
 
-### 2. TRUST SIGNALS (section: "trust")
-**Flag ONLY if:**
-- ZERO client logos anywhere visible
-- ZERO testimonials, reviews, or social proof
-- Trust elements use obvious stock photos
-**Selector:** "[class*='logo'], [class*='client'], [class*='partner'], [class*='testimonial']"
-
-### 3. VALUE PROPOSITION (section: "hero")
-**Flag ONLY if:**
-- Headline is generic fluff: "Welcome", "Solutions", "Services"
-- No subheadline explaining what company does
-- Visitor can't understand offering in 5 seconds
-**Selector:** "h1, [class*='hero'] h1, section:first-of-type h1"
-
-### 4. NAVIGATION (section: "navigation")
-**Flag ONLY if:**
-- More than 8 top-level menu items
-- Contact or Pricing completely missing
-**Selector:** "nav, header nav, [class*='nav']"
-
-### 5. FORM FRICTION (section: "cta")
-**Flag ONLY if:**
-- Form has more than 4 fields visible
-- Required fields not marked
-- No privacy/trust message near form
-**Selector:** "form, [class*='form']"
-
-## CONVERSION STATS (use exactly as written)
-- Ghost CTA: "30% fewer clicks than solid buttons"
-- No trust signals: "42% conversion lift when logos added"
+## CONVERSION IMPACT REFERENCE (use exact phrases)
+- Ghost/invisible CTA: "30% fewer clicks than solid buttons"
+- Zero trust signals: "42% conversion lift when logos added"
 - No CTA above fold: "84% less engagement"
 - Generic headline: "Up to 50% bounce rate increase"
-- Too many nav items: "Up to 50% higher bounce rate"
-- Form friction: "Each extra field reduces conversions 10%"
+- Navigation overload (>8 items): "Up to 50% higher bounce rate"
+- Form friction (per extra field): "10% conversion reduction per field"
+- Missing mobile optimization: "50%+ of traffic may bounce"
+- Slow page load: "7% conversion loss per second delay"
 
 ## OUTPUT FORMAT
 
-Return ONLY valid JSON. Return 2-3 issues if found, fewer if page is good:
+Return ONLY valid JSON with 2-3 issues (or fewer if page is good):
 
 {
   "sections": [
     {
-      "section": "hero" | "cta" | "trust" | "navigation",
-      "sectionSelector": "<broad section selector>",
+      "section": "hero" | "cta" | "trust" | "navigation" | "form",
+      "sectionSelector": "section selector like header, .hero, nav",
       "issue": {
-        "label": "<5-8 word specific problem>",
-        "conversionImpact": "<exact stat from above>",
+        "label": "Short 5-8 word title",
+        "description": "One sentence explaining what's wrong",
+        "conversionImpact": "Exact stat from list above",
         "severity": "critical" | "warning",
-        "elementSelector": "<CSS selector for the SPECIFIC element>"
+        "elementSelector": "CSS selector for the problem element"
       }
     }
   ]
 }
 
-## GOOD vs BAD LABELS
+## EXAMPLES
 
-✅ GOOD (specific, factual):
-- "No CTA Button Above Fold"
-- "Zero Client Logos Visible"
-- "Ghost Button Blends Into Background"
-- "Headline Says Nothing Specific"
-- "9 Navigation Items Cause Confusion"
+### GOOD (specific, verifiable):
+{
+  "sections": [
+    {
+      "section": "hero",
+      "sectionSelector": ".hero, section:first-of-type",
+      "issue": {
+        "label": "Generic Headline Lacks Value Proposition",
+        "description": "Headline says 'Welcome to Our Services' - doesn't explain what the company does",
+        "conversionImpact": "Up to 50% bounce rate increase",
+        "severity": "critical",
+        "elementSelector": "h1"
+      }
+    }
+  ]
+}
 
-❌ BAD (vague, opinionated):
-- "CTA Could Be Improved"
-- "Add More Trust Elements"
-- "Headline Needs Work"
-- "Navigation Could Be Cleaner"
+### BAD (vague, opinion-based):
+{
+  "sections": [
+    {
+      "section": "hero",
+      "sectionSelector": ".hero",
+      "issue": {
+        "label": "Headline Could Be More Compelling",
+        "description": "The headline works but could be stronger",
+        "conversionImpact": "Potentially lower engagement",
+        "severity": "warning",
+        "elementSelector": "h1"
+      }
+    }
+  ]
+}
+❌ Bad because: subjective opinion, no measurable problem, vague impact
 
-## FINAL CHECKLIST
-Before returning, verify:
-- [ ] Each issue is in a DIFFERENT screen area (for non-overlapping annotations)
-- [ ] Each issue uses an EXACT stat from the list
-- [ ] Each label is 5-8 words and specific
-- [ ] No opinions, only measurable problems
+## FINAL QUALITY CHECK
 
-If page is professionally designed with clear CTA, value prop, and trust signals - return 0-1 issues only.`;
+Before returning, verify each issue:
+- [ ] Would a business owner immediately understand this costs money?
+- [ ] Can you point to the EXACT problem in the screenshot?
+- [ ] Is the element you're flagging as "missing" ACTUALLY missing?
+- [ ] Are all issues in different page sections (300px+ apart)?
+- [ ] Would this make someone reply to a cold email?
+
+If the page has a clear CTA, specific headline, and visible trust signals - return 0-1 issues or empty sections array. Don't invent problems.
+
+Remember: You are writing cold email ammunition. Every issue you flag will be shown to a business owner with an annotated screenshot. Only flag things that are OBJECTIVELY broken and costing them money.`;
 }
 
 function parseAnalysisResponse(text: string): SectionIssue[] {
