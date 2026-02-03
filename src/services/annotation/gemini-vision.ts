@@ -33,169 +33,175 @@ function buildAnalysisPrompt(
     .map((d) => `- ${d.name}: ${d.status} (score: ${d.score}/100) - ${d.details}`)
     .join('\n');
 
-  return `You are a senior CRO (Conversion Rate Optimization) expert with autonomous decision-making authority. Analyze this homepage screenshot from ${url} and identify REAL conversion-killing issues.
+  return `You are analyzing the HERO SECTION ONLY (above-the-fold, no scrolling) of ${url}.
+
+Your job: Find 1-2 obvious conversion killers that make the business owner say "damn, you're right."
 
 ## DIAGNOSTIC DATA
 ${diagnosticLines}
 
-## YOUR MISSION
-Find 2-3 REAL, high-impact conversion issues that would make a prospect respond to a cold email. These must be issues the business owner will immediately recognize as revenue leaks.
+## WHAT TO SCAN FOR (Priority Order)
 
-## ANALYSIS FRAMEWORK
+### TIER 1: Instant Revenue Killers (Check These First)
 
-### PRIORITY 1: Revenue-Critical Issues (Always check first)
-1. **Missing/Broken CTA Above Fold**
-   - No clear primary action button visible without scrolling
-   - CTA button invisible (ghost style matching background)
-   - CTA text is generic: "Submit", "Click", "Go", "Learn More"
-   - Impact: "84% less engagement without CTA above fold"
+**1. Missing or Invisible Primary CTA**
+- Look for: Main action button in hero area
+- RED FLAGS:
+  - No button visible at all above fold
+  - Button is ghost/outline style in same color as background (literally invisible)
+  - Button says generic garbage: "Submit", "Click Here", "Learn More", "Get Started"
+- WHY IT MATTERS: "84% less engagement without visible CTA"
 
-2. **Unclear Value Proposition**
-   - Headline doesn't explain what the business does
-   - Generic platitudes: "Welcome", "Solutions", "Innovation", "Your Partner"
-   - Visitor can't understand the offering in 5 seconds
-   - Impact: "Up to 50% bounce rate increase with generic headlines"
+**2. WTF-Inducing Headline**
+- Look for: Main H1 headline in hero
+- RED FLAGS:
+  - Generic corporate word salad: "Welcome", "Your Trusted Partner", "Solutions That Work", "Innovation Leader"
+  - Doesn't answer: "What does this company actually DO?"
+  - You can't figure out their business in 3 seconds
+- WHY IT MATTERS: "Up to 50% bounce rate increase"
 
-3. **Zero Trust Signals** (⚠️ VERIFY CAREFULLY - SEE RULES BELOW)
-   - ONLY flag if you have scanned the ENTIRE screenshot and found ZERO logos
-   - Look for company logos like: GitLab, Google, Stripe, AWS, Microsoft, etc.
-   - Look for "Trusted by", "Our clients", "Partners" sections
-   - If you see ANY logo or company name displayed, DO NOT flag this
-   - Impact: "42% conversion lift when trust signals added"
+**3. Zero Trust Signals in Hero**
+- Look for: Client logos, testimonials, trust badges, ratings, "As Seen In" in visible area
+- RED FLAGS:
+  - Completely empty - no social proof anywhere visible
+  - Only a random stock photo of smiling people
+  - Generic "trusted by businesses" claim with no logos
+- ⚠️ CRITICAL: Scan the ENTIRE screenshot first. If you see ANY logos (GitLab, Google, Stripe, company names, etc.), DO NOT flag this.
+- WHY IT MATTERS: "42% conversion lift when trust signals added"
 
-### PRIORITY 2: High-Friction Issues
-4. **Form Friction**
-   - Visible forms with >4 fields
-   - No indication which fields are required
-   - Missing privacy/security reassurance near form
-   - Impact: "Each extra field reduces conversions by 10%"
+### TIER 2: High-Friction Killers (Only if Tier 1 is clean)
 
-5. **Navigation Overload**
-   - More than 8 top-level menu items
-   - Pricing or Contact info missing from navigation
-   - Impact: "Up to 50% higher bounce rate with cluttered navigation"
+**4. Form That Screams "I'll Waste Your Time"**
+- Look for: Any form/signup visible in hero
+- RED FLAGS:
+  - More than 3 fields showing (Name, Email, Phone, Company, Message = TOO MUCH)
+  - No asterisks or "required" labels
+  - No "We respect your privacy" or security message
+- WHY IT MATTERS: "Each extra field = 10% conversion drop"
 
-6. **Hero Image/Video Problems**
-   - Generic stock photos that don't show product/service
-   - Auto-playing video without controls
-   - Hero image completely blocks headline/CTA
+**5. CTA Button Identity Crisis**
+- Look for: Multiple competing CTAs in hero
+- RED FLAGS:
+  - 3+ different buttons all fighting for attention
+  - Visitor has choice paralysis
+- WHY IT MATTERS: "35% fewer conversions with multiple CTAs"
 
-### PRIORITY 3: Mobile & Performance Issues
-7. **Mobile Responsiveness Failures**
-   - Text cut off or overlapping on mobile
-   - Buttons too small to tap (<44px)
-   - Horizontal scrolling required
+**6. Hero Image That Adds Zero Value**
+- Look for: Main hero image/visual
+- RED FLAGS:
+  - Generic stock photo (handshake, laptop on desk, diverse office meeting)
+  - Image tells you NOTHING about what product/service actually is
+- WHY IT MATTERS: "27% higher engagement with product-specific visuals"
 
-8. **Page Speed Indicators**
-   - Lazy-loaded hero content (blank screen)
-   - Broken images in critical areas
-   - Layout shift pushing content down
-
-### PRIORITY 4: Credibility Killers
-9. **Outdated/Broken Elements**
-   - Copyright year more than 1 year old
-   - Broken images or placeholder text
-   - "Lorem ipsum" or template content visible
-   - SSL warning or "Not Secure" indicator
-
-10. **Inconsistent Branding**
-    - Multiple different CTAs competing (5+ different actions)
-    - Conflicting color schemes or fonts
-    - Unprofessional design that damages trust
+---
 
 ## STRICT SELECTION RULES
 
-### ONLY FLAG IF:
-1. **Objectively measurable** - Clear UX/conversion problem, not subjective preference
-2. **Visible in screenshot** - You can identify the exact element
-3. **Backed by conversion data** - Reference the impact stats provided
-4. **Spatially distinct** - Each issue in a DIFFERENT section (hero vs. navigation vs. form)
-5. **Business impact** - Issue directly costs revenue/leads
-6. **Verifiable** - Business owner can immediately see it's true
+### STOP AND THINK:
+1. **Would the business owner immediately recognize this as a problem?**
+   - ✅ "Oh shit, we don't have a CTA button"
+   - ❌ "Well, our headline could technically be better"
+
+2. **Is this costing them money RIGHT NOW?**
+   - ✅ Invisible CTA = visitors leave confused
+   - ❌ "Blue would convert better than green" = speculation
+
+3. **Can you point to it exactly in the screenshot?**
+   - ✅ "This button right here says 'Submit'"
+   - ❌ "The overall vibe is off"
 
 ### NEVER FLAG:
-- Stylistic opinions ("This color would work better")
-- Minor polish ("Headline could be punchier")
-- Things that work but "could be optimized"
-- Multiple issues in the same 300px radius
-- Theoretical problems without visible evidence
-- Industry-standard patterns that work (e.g., top navigation)
-- Elements that ARE present (don't say "missing X" if X exists)
-- Subheadlines that exist (if there's explanatory text below headline, don't flag it)
-- Solid colored buttons (don't call them "ghost" unless truly transparent)
+- "This could be improved" (only flag broken/missing)
+- Color/font preferences
+- Things that work but aren't "optimal"
+- Anything you need to scroll to see
+- Industry jargon issues (unless literally incomprehensible)
+- Trust signals if ANY logos are visible (scan carefully!)
+- Headlines that explain what the company does (even if not "perfect")
 
-## ⚠️ TRUST SIGNALS - CRITICAL VERIFICATION ⚠️
+---
 
-**BEFORE flagging "missing trust signals" or "no logos", you MUST:**
+## DECISION TREE (Follow This Order)
 
-1. **SCAN THE ENTIRE SCREENSHOT** for company logos, client logos, partner logos
-2. **LOOK FOR**: GitLab, Google, Microsoft, AWS, Stripe, or ANY company name/logo
-3. **CHECK FOR**: "Trusted by", "As seen in", "Our clients", "Partners" sections
-4. **LOOK AT ALL AREAS**: Header, hero section, below hero, sidebar, anywhere visible
+1. Is there a clear CTA button above fold?
+   NO → FLAG IT → Continue to find one more
+   YES → Continue
 
-**If you see ANY of the following, DO NOT flag trust signals:**
-- Company logos (even small ones)
-- Client/partner logos (e.g., "GitLab", "upvest", "CANARY", "PortSwigger")
-- "Trusted by X companies" text
-- Customer testimonials
-- Star ratings or review counts
-- Media mentions ("As seen in Forbes", etc.)
-- Security badges (SSL, SOC2, GDPR)
+2. Does the headline explain what they do?
+   NO → FLAG IT → Stop if you have 2 issues
+   YES → Continue
 
-**ONLY flag "missing trust signals" if you have visually confirmed ZERO logos exist anywhere in the screenshot.**
+3. Are there ANY trust signals (logos/testimonials) visible?
+   NO → FLAG IT → Stop
+   YES → Continue
 
-## CRITICAL VERIFICATION STEP
+4. Is there a form with 4+ fields?
+   YES → FLAG IT
+   NO → Continue
 
-Before flagging ANY issue, perform these checks:
+5. Are there 3+ competing CTAs?
+   YES → FLAG IT
+   NO → Continue
 
-1. **VISUAL SCAN**: Look at the ENTIRE screenshot carefully
-2. **ELEMENT CHECK**: Is the element I'm flagging as "missing" actually missing?
-3. **LOGO CHECK**: Before flagging trust issues, count visible logos (if count > 0, don't flag)
-4. **BUSINESS OWNER TEST**: Would they agree this is broken, or is it just my preference?
+6. Is the hero image generic stock photo?
+   YES → FLAG IT
+   NO → NO ISSUES FOUND (don't force it)
 
-**If you're not 100% certain an element is missing, DO NOT flag it.**
-
-## CONVERSION IMPACT REFERENCE (use exact phrases)
-- Ghost/invisible CTA: "30% fewer clicks than solid buttons"
-- Zero trust signals: "42% conversion lift when logos added"
-- No CTA above fold: "84% less engagement"
-- Generic headline: "Up to 50% bounce rate increase"
-- Navigation overload (>8 items): "Up to 50% higher bounce rate"
-- Form friction (per extra field): "10% conversion reduction per field"
-- Missing mobile optimization: "50%+ of traffic may bounce"
-- Slow page load: "7% conversion loss per second delay"
+---
 
 ## OUTPUT FORMAT
 
-Return ONLY valid JSON with 2-3 issues (or fewer if page is good):
+Return ONLY valid JSON with 1-2 issues max (or empty if page is good):
 
 {
   "sections": [
     {
-      "section": "hero" | "cta" | "trust" | "navigation" | "form",
-      "sectionSelector": "section selector like header, .hero, nav",
+      "section": "cta",
+      "sectionSelector": ".hero, section:first-of-type",
       "issue": {
-        "label": "Short 5-8 word title",
-        "description": "One sentence explaining what's wrong",
-        "conversionImpact": "Exact stat from list above",
-        "severity": "critical" | "warning",
-        "elementSelector": "CSS selector for the problem element"
+        "label": "No CTA Button Visible Above Fold",
+        "description": "Visitors see your hero section but have no clear next step - no 'Book Demo' or primary action button visible",
+        "conversionImpact": "84% less engagement",
+        "severity": "critical",
+        "elementSelector": ".hero, section:first-of-type"
       }
     }
   ]
 }
 
+### Field Mapping:
+- **section**: "cta" | "hero" | "trust" | "form"
+- **label**: Short 5-8 word title (what's wrong)
+- **description**: One sentence explaining the problem
+- **conversionImpact**: Exact stat from above (e.g., "84% less engagement")
+- **severity**: "critical" for Tier 1, "warning" for Tier 2
+
+---
+
+## QUALITY CONTROL
+
+Before returning, ask yourself:
+
+1. **The "Grateful" Test**: Would they thank you for pointing this out?
+2. **The "Screenshot" Test**: Can you show them exactly what's wrong?
+3. **The "Money" Test**: Is this costing them actual conversions?
+4. **The "Obvious" Test**: Will they say "yep, that's broken" not "hmm, maybe"?
+
+If you can't answer YES to all 4 → Don't flag it.
+
+---
+
 ## EXAMPLES
 
-### GOOD (specific, verifiable):
+### ✅ GOOD (Flag This)
 {
   "sections": [
     {
       "section": "hero",
-      "sectionSelector": ".hero, section:first-of-type",
+      "sectionSelector": "h1",
       "issue": {
-        "label": "Generic Headline Lacks Value Proposition",
-        "description": "Headline says 'Welcome to Our Services' - doesn't explain what the company does",
+        "label": "Generic Headline Doesn't Explain Business",
+        "description": "Headline says 'Welcome to TechCorp Solutions' - visitor can't tell if you're selling software, consulting, or hardware",
         "conversionImpact": "Up to 50% bounce rate increase",
         "severity": "critical",
         "elementSelector": "h1"
@@ -204,36 +210,39 @@ Return ONLY valid JSON with 2-3 issues (or fewer if page is good):
   ]
 }
 
-### BAD (vague, opinion-based):
+### ✅ GOOD (Flag This)
 {
   "sections": [
     {
-      "section": "hero",
+      "section": "cta",
       "sectionSelector": ".hero",
       "issue": {
-        "label": "Headline Could Be More Compelling",
-        "description": "The headline works but could be stronger",
-        "conversionImpact": "Potentially lower engagement",
-        "severity": "warning",
-        "elementSelector": "h1"
+        "label": "No CTA Button Visible in Hero",
+        "description": "Large hero image and headline but no button anywhere - visitors see your pitch but have no way to take action",
+        "conversionImpact": "84% less engagement",
+        "severity": "critical",
+        "elementSelector": ".hero"
       }
     }
   ]
 }
-❌ Bad because: subjective opinion, no measurable problem, vague impact
 
-## FINAL QUALITY CHECK
+### ❌ BAD (Don't Flag)
+- "Headline could be more benefit-focused" → The headline WORKS, "could be better" ≠ broken
+- "Orange buttons convert better" → Color preference = speculation
+- "Missing trust signals" when logos ARE visible → Scan the screenshot first!
 
-Before returning, verify each issue:
-- [ ] Would a business owner immediately understand this costs money?
-- [ ] Can you point to the EXACT problem in the screenshot?
-- [ ] Is the element you're flagging as "missing" ACTUALLY missing?
-- [ ] Are all issues in different page sections (300px+ apart)?
-- [ ] Would this make someone reply to a cold email?
+---
 
-If the page has a clear CTA, specific headline, and visible trust signals - return 0-1 issues or empty sections array. Don't invent problems.
+## REMEMBER
 
-Remember: You are writing cold email ammunition. Every issue you flag will be shown to a business owner with an annotated screenshot. Only flag things that are OBJECTIVELY broken and costing them money.`;
+You're creating cold email ammunition. Every issue you flag will be:
+1. Shown to a business owner in an annotated screenshot
+2. Used as the reason they should reply to your email
+
+**Quality > Quantity. 1 perfect issue > 3 mediocre ones.**
+
+Only flag things that are OBVIOUSLY broken and costing them money. If the page has a clear CTA, specific headline, and visible trust signals - return empty sections array. Don't invent problems.`;
 }
 
 function parseAnalysisResponse(text: string): SectionIssue[] {
