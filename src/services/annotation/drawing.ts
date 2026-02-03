@@ -330,10 +330,9 @@ function buildAnnotationSvg(
       `font-family="Arial, Helvetica, sans-serif" font-size="${BADGE_FONT_SIZE}" font-weight="bold" fill="white">${index + 1}</text>`
   );
 
-  // ========== 4. DRAW STRAIGHT ARROW WITH SAFETY MARGIN ==========
-  // Arrow starts from card edge
-  // Arrow ends 8px BEFORE target element edge (NOT at center)
-  // This prevents arrow from overlapping the target element
+  // ========== 4. DRAW STRAIGHT ARROW - STRICT RULE: NEVER THROUGH CARD ==========
+  // Arrow MUST exit from the correct card edge facing the target
+  // Arrow MUST NOT pass through the card body
 
   const ARROW_MARGIN = 8; // Safety margin from element edge
 
@@ -342,35 +341,74 @@ function buildAnnotationSvg(
   let arrowEndX: number;
   let arrowEndY: number;
 
-  // Determine arrow direction and end point (stop at element edge with margin)
-  if (targetCenterX < boxX) {
-    // Target is to the LEFT of card
-    arrowStartX = boxX;
-    arrowStartY = Math.max(boxY + 15, Math.min(targetCenterY, boxY + boxHeight - 15));
-    // Arrow ends at RIGHT edge of target + margin
-    arrowEndX = targetRect.x + targetRect.w + ARROW_MARGIN;
-    arrowEndY = targetCenterY;
-  } else if (targetCenterX > boxX + boxWidth) {
-    // Target is to the RIGHT of card
+  // Calculate card center
+  const cardCenterX = boxX + boxWidth / 2;
+  const cardCenterY = boxY + boxHeight / 2;
+
+  // Calculate angle from card center to target center
+  const angleToTarget = Math.atan2(targetCenterY - cardCenterY, targetCenterX - cardCenterX);
+  const angleDeg = angleToTarget * 180 / Math.PI;
+
+  // Determine which edge to exit from based on angle
+  // -45 to 45 = RIGHT edge
+  // 45 to 135 = BOTTOM edge
+  // 135 to 180 or -180 to -135 = LEFT edge
+  // -135 to -45 = TOP edge
+
+  if (angleDeg >= -45 && angleDeg < 45) {
+    // Target is to the RIGHT - exit from right edge
     arrowStartX = boxX + boxWidth;
-    arrowStartY = Math.max(boxY + 15, Math.min(targetCenterY, boxY + boxHeight - 15));
-    // Arrow ends at LEFT edge of target - margin
+    arrowStartY = cardCenterY + Math.tan(angleToTarget) * (boxWidth / 2);
+    // Clamp Y to card bounds
+    arrowStartY = Math.max(boxY + 10, Math.min(arrowStartY, boxY + boxHeight - 10));
+    // Arrow ends at left edge of target
     arrowEndX = targetRect.x - ARROW_MARGIN;
     arrowEndY = targetCenterY;
-  } else if (targetCenterY < boxY) {
-    // Target is ABOVE card
-    arrowStartX = Math.max(boxX + 15, Math.min(targetCenterX, boxX + boxWidth - 15));
-    arrowStartY = boxY;
-    // Arrow ends at BOTTOM edge of target + margin
-    arrowEndX = targetCenterX;
-    arrowEndY = targetRect.y + targetRect.h + ARROW_MARGIN;
-  } else {
-    // Target is BELOW card
-    arrowStartX = Math.max(boxX + 15, Math.min(targetCenterX, boxX + boxWidth - 15));
+  } else if (angleDeg >= 45 && angleDeg < 135) {
+    // Target is BELOW - exit from bottom edge
     arrowStartY = boxY + boxHeight;
-    // Arrow ends at TOP edge of target - margin
+    arrowStartX = cardCenterX + (boxHeight / 2) / Math.tan(angleToTarget);
+    // Clamp X to card bounds
+    arrowStartX = Math.max(boxX + 10, Math.min(arrowStartX, boxX + boxWidth - 10));
+    // Arrow ends at top edge of target
     arrowEndX = targetCenterX;
     arrowEndY = targetRect.y - ARROW_MARGIN;
+  } else if (angleDeg >= 135 || angleDeg < -135) {
+    // Target is to the LEFT - exit from left edge
+    arrowStartX = boxX;
+    arrowStartY = cardCenterY - Math.tan(angleToTarget) * (boxWidth / 2);
+    // Clamp Y to card bounds
+    arrowStartY = Math.max(boxY + 10, Math.min(arrowStartY, boxY + boxHeight - 10));
+    // Arrow ends at right edge of target
+    arrowEndX = targetRect.x + targetRect.w + ARROW_MARGIN;
+    arrowEndY = targetCenterY;
+  } else {
+    // Target is ABOVE (-135 to -45) - exit from top edge
+    arrowStartY = boxY;
+    arrowStartX = cardCenterX - (boxHeight / 2) / Math.tan(angleToTarget);
+    // Clamp X to card bounds
+    arrowStartX = Math.max(boxX + 10, Math.min(arrowStartX, boxX + boxWidth - 10));
+    // Arrow ends at bottom edge of target
+    arrowEndX = targetCenterX;
+    arrowEndY = targetRect.y + targetRect.h + ARROW_MARGIN;
+  }
+
+  // SAFETY CHECK: Verify arrow doesn't pass through card
+  // If start point is somehow inside card, force it to nearest edge
+  if (arrowStartX > boxX && arrowStartX < boxX + boxWidth &&
+      arrowStartY > boxY && arrowStartY < boxY + boxHeight) {
+    console.log(`[drawing] WARNING: Arrow start inside card, correcting...`);
+    // Find closest edge
+    const distToLeft = arrowStartX - boxX;
+    const distToRight = boxX + boxWidth - arrowStartX;
+    const distToTop = arrowStartY - boxY;
+    const distToBottom = boxY + boxHeight - arrowStartY;
+    const minDist = Math.min(distToLeft, distToRight, distToTop, distToBottom);
+
+    if (minDist === distToLeft) arrowStartX = boxX;
+    else if (minDist === distToRight) arrowStartX = boxX + boxWidth;
+    else if (minDist === distToTop) arrowStartY = boxY;
+    else arrowStartY = boxY + boxHeight;
   }
 
   // STRAIGHT LINE from card edge to target edge (with margin)

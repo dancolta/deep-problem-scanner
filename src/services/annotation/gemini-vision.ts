@@ -56,11 +56,11 @@ Find 2-3 REAL, high-impact conversion issues that would make a prospect respond 
    - Visitor can't understand the offering in 5 seconds
    - Impact: "Up to 50% bounce rate increase with generic headlines"
 
-3. **Zero Trust Signals**
-   - No client logos anywhere on homepage
-   - No testimonials, reviews, case studies, or ratings
-   - No "As Seen In" media mentions
-   - Trust elements use obvious stock photos
+3. **Zero Trust Signals** (⚠️ VERIFY CAREFULLY - SEE RULES BELOW)
+   - ONLY flag if you have scanned the ENTIRE screenshot and found ZERO logos
+   - Look for company logos like: GitLab, Google, Stripe, AWS, Microsoft, etc.
+   - Look for "Trusted by", "Our clients", "Partners" sections
+   - If you see ANY logo or company name displayed, DO NOT flag this
    - Impact: "42% conversion lift when trust signals added"
 
 ### PRIORITY 2: High-Friction Issues
@@ -122,15 +122,38 @@ Find 2-3 REAL, high-impact conversion issues that would make a prospect respond 
 - Industry-standard patterns that work (e.g., top navigation)
 - Elements that ARE present (don't say "missing X" if X exists)
 - Subheadlines that exist (if there's explanatory text below headline, don't flag it)
-- Trust logos that are visible (if you see company logos, don't flag "no trust signals")
 - Solid colored buttons (don't call them "ghost" unless truly transparent)
+
+## ⚠️ TRUST SIGNALS - CRITICAL VERIFICATION ⚠️
+
+**BEFORE flagging "missing trust signals" or "no logos", you MUST:**
+
+1. **SCAN THE ENTIRE SCREENSHOT** for company logos, client logos, partner logos
+2. **LOOK FOR**: GitLab, Google, Microsoft, AWS, Stripe, or ANY company name/logo
+3. **CHECK FOR**: "Trusted by", "As seen in", "Our clients", "Partners" sections
+4. **LOOK AT ALL AREAS**: Header, hero section, below hero, sidebar, anywhere visible
+
+**If you see ANY of the following, DO NOT flag trust signals:**
+- Company logos (even small ones)
+- Client/partner logos (e.g., "GitLab", "upvest", "CANARY", "PortSwigger")
+- "Trusted by X companies" text
+- Customer testimonials
+- Star ratings or review counts
+- Media mentions ("As seen in Forbes", etc.)
+- Security badges (SSL, SOC2, GDPR)
+
+**ONLY flag "missing trust signals" if you have visually confirmed ZERO logos exist anywhere in the screenshot.**
 
 ## CRITICAL VERIFICATION STEP
 
-Before flagging ANY issue, ask yourself:
-1. "Can I see this problem clearly in the screenshot?" - If NO, don't flag it
-2. "Is the element I'm flagging as missing actually missing?" - If it EXISTS, don't flag it
-3. "Would the business owner agree this is broken?" - If it's just preference, don't flag it
+Before flagging ANY issue, perform these checks:
+
+1. **VISUAL SCAN**: Look at the ENTIRE screenshot carefully
+2. **ELEMENT CHECK**: Is the element I'm flagging as "missing" actually missing?
+3. **LOGO CHECK**: Before flagging trust issues, count visible logos (if count > 0, don't flag)
+4. **BUSINESS OWNER TEST**: Would they agree this is broken, or is it just my preference?
+
+**If you're not 100% certain an element is missing, DO NOT flag it.**
 
 ## CONVERSION IMPACT REFERENCE (use exact phrases)
 - Ghost/invisible CTA: "30% fewer clicks than solid buttons"
