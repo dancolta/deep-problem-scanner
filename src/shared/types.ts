@@ -40,6 +40,11 @@ export interface AppSettings {
   concurrency: number;
   sendIntervalMinutes: number;
   timezone: string;
+  geminiApiKey?: string;
+  scheduleStartHour: number;
+  scheduleEndHour: number;
+  emailsPerHour: number;
+  distributionPattern: 'spread' | 'burst';
 }
 
 export interface EmailDraft {
@@ -48,7 +53,7 @@ export interface EmailDraft {
   body: string;
   screenshotDriveUrl: string;
   leadData: Lead;
-  status: 'draft' | 'scheduled' | 'sent' | 'failed';
+  status: 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
 }
 
 export interface SheetRow {
@@ -61,7 +66,8 @@ export interface SheetRow {
   diagnostics_summary: string;
   email_subject: string;
   email_body: string;
-  email_status: 'draft' | 'scheduled' | 'sent' | 'failed';
+  email_status: 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
+  draft_id?: string;
   scheduled_time?: string;
   sent_time?: string;
 }

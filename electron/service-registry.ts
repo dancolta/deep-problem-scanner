@@ -1,4 +1,4 @@
-import { ScannerService } from '../src/services/scanner/scanner-service';
+import { PlaywrightScanner } from '../src/services/scanner/playwright-scanner';
 import { AnnotationService } from '../src/services/annotation/annotation-service';
 import { GoogleAuthService } from '../src/services/google/auth';
 import { SheetsService } from '../src/services/google/sheets';
@@ -13,7 +13,7 @@ import type { SchedulerConfig } from '../src/services/scheduler/types';
 export class ServiceRegistry {
   private static instance: ServiceRegistry;
 
-  private _scanner: ScannerService | null = null;
+  private _scanner: PlaywrightScanner | null = null;
   private _annotation: AnnotationService | null = null;
   private _googleAuth: GoogleAuthService | null = null;
   private _emailGenerator: EmailGenerator | null = null;
@@ -29,9 +29,9 @@ export class ServiceRegistry {
     return ServiceRegistry.instance;
   }
 
-  get scanner(): ScannerService {
+  get scanner(): PlaywrightScanner {
     if (!this._scanner) {
-      this._scanner = new ScannerService();
+      this._scanner = new PlaywrightScanner();
     }
     return this._scanner;
   }
@@ -87,11 +87,18 @@ export class ServiceRegistry {
   }
 
   getScheduler(config?: SchedulerConfig): EmailScheduler {
+    if (config) {
+      // Always create fresh scheduler when config is provided
+      this._scheduler = new EmailScheduler(config);
+    }
     if (!this._scheduler) {
-      this._scheduler = new EmailScheduler(config ?? {
+      this._scheduler = new EmailScheduler({
         intervalMinutes: 15,
         timezone: 'UTC',
         maxRetries: 3,
+        startHour: 9,
+        endHour: 17,
+        distributionPattern: 'spread',
       });
     }
     return this._scheduler;

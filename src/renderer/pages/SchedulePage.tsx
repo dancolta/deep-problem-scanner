@@ -11,11 +11,27 @@ interface LogEntry {
 
 type SchedulerState = 'idle' | 'running' | 'stopped';
 
+const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
+  value: i,
+  label: `${i === 0 ? '12' : i > 12 ? i - 12 : i}:00 ${i < 12 ? 'AM' : 'PM'}`,
+}));
+
 export default function SchedulePage() {
   const [emails, setEmails] = useState<SheetRow[]>([]);
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerState>('idle');
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [syncing, setSyncing] = useState(false);
+
+  // Schedule config
+  const todayStr = new Date().toISOString().split('T')[0];
+  const [startDate, setStartDate] = useState(todayStr);
+  const [startHour, setStartHour] = useState(9);
+  const [endHour, setEndHour] = useState(17);
+  const [emailsPerHour, setEmailsPerHour] = useState(4);
+  const [distributionPattern, setDistributionPattern] = useState<'spread' | 'burst'>('spread');
+  const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
+  const [configError, setConfigError] = useState<string | null>(null);
 
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -33,16 +49,40 @@ export default function SchedulePage() {
     });
   }, []);
 
-  const loadData = useCallback(async () => {
-    const s = await getSettings();
-    if (s) {
-      setSettings(s);
-      const rows = await readSheet(s.googleSheetUrl);
-      if (rows) setEmails(rows);
+  const loadFromSheet = useCallback(async () => {
+    try {
+      const settingsResp = await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_GET) as any;
+      const s: AppSettings | undefined = settingsResp?.settings ?? settingsResp;
+      if (s?.googleSheetUrl) {
+        setSettings(s);
+        if (s.scheduleStartHour !== undefined) setStartHour(s.scheduleStartHour);
+        if (s.scheduleEndHour !== undefined) setEndHour(s.scheduleEndHour);
+        if (s.emailsPerHour !== undefined) setEmailsPerHour(s.emailsPerHour);
+        if (s.distributionPattern) setDistributionPattern(s.distributionPattern);
+        if (s.timezone) setTimezone(s.timezone);
+        if ((s as any).scheduleStartDate) setStartDate((s as any).scheduleStartDate);
+        const match = s.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+        const spreadsheetId = match ? match[1] : s.googleSheetUrl;
+        const sheetsResp = await window.electronAPI.invoke(IPC_CHANNELS.SHEETS_READ, spreadsheetId) as any;
+        if (sheetsResp?.success && sheetsResp.rows) {
+          setEmails(sheetsResp.rows);
+        }
+      }
+    } catch {
+      // Handled by error state already
     }
-    const statusResult = await getStatus();
-    if (statusResult) setSchedulerStatus(statusResult.status);
-  }, [getSettings, readSheet, getStatus]);
+    try {
+      const statusResp = await window.electronAPI.invoke(IPC_CHANNELS.SCHEDULER_STATUS) as any;
+      if (statusResp?.success && statusResp.status) {
+        const s = statusResp.status;
+        setSchedulerStatus(s.running ? 'running' : s.stopped ? 'stopped' : 'idle');
+      }
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  const loadData = loadFromSheet;
 
   useEffect(() => {
     loadData();
@@ -51,15 +91,14 @@ export default function SchedulePage() {
   // Listen for scheduler progress events
   useEffect(() => {
     const unsub = window.electronAPI.on(IPC_CHANNELS.SCHEDULER_PROGRESS, (...args: unknown[]) => {
-      const data = args[0] as { message?: string; status?: SchedulerState; emails?: SheetRow[] };
-      if (data.message) {
-        addLogEntry(data.message);
+      const data = args[0] as any;
+      if (data.detail) {
+        addLogEntry(data.detail);
       }
-      if (data.status) {
-        setSchedulerStatus(data.status);
-      }
-      if (data.emails) {
-        setEmails(data.emails);
+      if (data.type === 'started') {
+        setSchedulerStatus('running');
+      } else if (data.type === 'stopped') {
+        setSchedulerStatus('stopped');
       }
     });
     return unsub;
@@ -70,8 +109,45 @@ export default function SchedulePage() {
     logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activityLog]);
 
+  const saveScheduleConfig = async () => {
+    try {
+      const settingsResp = await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_GET) as any;
+      const current = settingsResp?.settings ?? settingsResp ?? {};
+      const updated = {
+        ...current,
+        scheduleStartDate: startDate,
+        scheduleStartHour: startHour,
+        scheduleEndHour: endHour,
+        emailsPerHour,
+        distributionPattern,
+        timezone,
+      };
+      await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_SET, updated);
+    } catch {
+      // Best-effort save
+    }
+  };
+
   const handleStart = async () => {
-    await startScheduler();
+    // Validate start date+hour is not in the past
+    const selectedStart = new Date(`${startDate}T${String(startHour).padStart(2, '0')}:00:00`);
+    if (selectedStart < new Date()) {
+      setConfigError('Start date and hour cannot be in the past.');
+      return;
+    }
+    if (endHour <= startHour) {
+      setConfigError('End hour must be after start hour.');
+      return;
+    }
+    setConfigError(null);
+    await saveScheduleConfig();
+    await window.electronAPI.invoke(IPC_CHANNELS.SCHEDULER_START, {
+      scheduleStartDate: startDate,
+      scheduleStartHour: startHour,
+      scheduleEndHour: endHour,
+      emailsPerHour,
+      distributionPattern,
+    });
     setSchedulerStatus('running');
     addLogEntry('Scheduler started');
   };
@@ -96,6 +172,104 @@ export default function SchedulePage() {
       <p className="page-subtitle">Monitor and control automated email delivery.</p>
 
       {displayError && <div className="error-banner">{displayError}</div>}
+
+      {/* Schedule Configuration */}
+      <div className="schedule-config">
+        <h3>Send Configuration</h3>
+        {configError && <div className="config-error">{configError}</div>}
+        <div className="config-grid">
+          <div className="config-field">
+            <label>Start Date</label>
+            <input
+              type="date"
+              value={startDate}
+              min={todayStr}
+              onChange={e => { setStartDate(e.target.value); setConfigError(null); }}
+              disabled={schedulerStatus === 'running'}
+            />
+          </div>
+          <div className="config-field">
+            <label>Send Window Start</label>
+            <select
+              value={startHour}
+              onChange={e => setStartHour(Number(e.target.value))}
+              disabled={schedulerStatus === 'running'}
+            >
+              {HOUR_OPTIONS.map(h => (
+                <option key={h.value} value={h.value}>{h.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="config-field">
+            <label>Send Window End</label>
+            <select
+              value={endHour}
+              onChange={e => setEndHour(Number(e.target.value))}
+              disabled={schedulerStatus === 'running'}
+            >
+              {HOUR_OPTIONS.map(h => (
+                <option key={h.value} value={h.value}>{h.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="config-field">
+            <label>Emails Per Hour</label>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              value={emailsPerHour}
+              onChange={e => setEmailsPerHour(Math.max(1, Math.min(60, Number(e.target.value))))}
+              disabled={schedulerStatus === 'running'}
+            />
+          </div>
+          <div className="config-field">
+            <label>Distribution</label>
+            <div className="radio-group">
+              <label className="radio-label">
+                <input
+                  type="radio"
+                  name="distribution"
+                  value="spread"
+                  checked={distributionPattern === 'spread'}
+                  onChange={() => setDistributionPattern('spread')}
+                  disabled={schedulerStatus === 'running'}
+                />
+                Spread evenly
+              </label>
+              <label className="radio-label">
+                <input
+                  type="radio"
+                  name="distribution"
+                  value="burst"
+                  checked={distributionPattern === 'burst'}
+                  onChange={() => setDistributionPattern('burst')}
+                  disabled={schedulerStatus === 'running'}
+                />
+                Send all at once
+              </label>
+            </div>
+          </div>
+          <div className="config-field">
+            <label>Timezone</label>
+            <select
+              value={timezone}
+              onChange={e => setTimezone(e.target.value)}
+              disabled={schedulerStatus === 'running'}
+            >
+              {[
+                'America/New_York', 'America/Chicago', 'America/Denver', 'America/Los_Angeles',
+                'America/Anchorage', 'Pacific/Honolulu', 'America/Phoenix',
+                'Europe/London', 'Europe/Paris', 'Europe/Berlin', 'Europe/Amsterdam', 'Europe/Bucharest',
+                'Asia/Tokyo', 'Asia/Shanghai', 'Asia/Kolkata', 'Asia/Dubai',
+                'Australia/Sydney', 'Pacific/Auckland', 'UTC',
+              ].map(tz => (
+                <option key={tz} value={tz}>{tz.replace(/_/g, ' ')}</option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
 
       {/* Controls */}
       <div className="schedule-controls">
@@ -125,8 +299,15 @@ export default function SchedulePage() {
           </span>
         )}
 
-        <button className="btn btn-refresh" onClick={loadData} disabled={sheetLoading}>
-          {sheetLoading ? 'Loading...' : 'Refresh'}
+        <button
+          className="btn btn-refresh"
+          onClick={async () => {
+            setSyncing(true);
+            try { await loadFromSheet(); } finally { setSyncing(false); }
+          }}
+          disabled={sheetLoading || syncing}
+        >
+          {syncing || sheetLoading ? 'Syncing...' : 'Sync with Sheet'}
         </button>
       </div>
 

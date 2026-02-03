@@ -13,13 +13,15 @@ export interface ValidationResult {
 }
 
 const COLUMN_VARIANTS: Record<string, string[]> = {
-  company_name: ['company_name', 'company', 'companyname', 'business', 'business_name'],
+  company_name: ['company_name', 'company', 'companyname', 'business', 'business_name', 'company_name_for_emails'],
   website_url: ['website_url', 'website', 'url', 'site', 'web', 'homepage'],
   contact_name: ['contact_name', 'name', 'contactname', 'contact', 'full_name', 'fullname'],
   contact_email: ['contact_email', 'email', 'contactemail', 'mail', 'email_address'],
+  first_name: ['first_name', 'firstname', 'first'],
+  last_name: ['last_name', 'lastname', 'last', 'surname'],
 };
 
-const REQUIRED_COLUMNS = Object.keys(COLUMN_VARIANTS);
+const REQUIRED_COLUMNS = ['company_name', 'website_url', 'contact_email', 'contact_name'];
 
 export class CsvParser {
   validateHeaders(headers: string[]): ValidationResult {
@@ -27,12 +29,24 @@ export class CsvParser {
     const columnMap: Record<string, string> = {};
     const missingColumns: string[] = [];
 
-    for (const requiredField of REQUIRED_COLUMNS) {
-      const variants = COLUMN_VARIANTS[requiredField];
+    // Map all known column variants
+    for (const [field, variants] of Object.entries(COLUMN_VARIANTS)) {
       const matchIndex = normalized.findIndex(h => variants.includes(h));
       if (matchIndex !== -1) {
-        columnMap[normalized[matchIndex]] = requiredField;
-      } else {
+        columnMap[normalized[matchIndex]] = field;
+      }
+    }
+
+    // Check only required columns
+    for (const requiredField of REQUIRED_COLUMNS) {
+      const variants = COLUMN_VARIANTS[requiredField];
+      const found = normalized.some(h => variants.includes(h));
+      if (!found) {
+        // contact_name is satisfied if first_name exists
+        if (requiredField === 'contact_name') {
+          const firstNameVariants = COLUMN_VARIANTS['first_name'];
+          if (normalized.some(h => firstNameVariants.includes(h))) continue;
+        }
         missingColumns.push(requiredField);
       }
     }
@@ -89,9 +103,13 @@ export class CsvParser {
         if (standardField) {
           lead[standardField] = value.trim();
         } else {
-          // Extra column - store with normalized header name
           lead[normalizedHeaders[j]] = value.trim();
         }
+      }
+
+      // Build contact_name from first_name if not set directly
+      if (!lead.contact_name && lead.first_name) {
+        lead.contact_name = lead.first_name;
       }
 
       leads.push(lead as Lead);

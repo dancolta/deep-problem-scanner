@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { useIpcInvoke } from '../hooks/useIpc';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import type { AppSettings } from '../../shared/types';
 import './SetupPage.css';
+
+interface SavedSettings {
+  googleSheetUrl?: string;
+  concurrency?: number;
+  sendIntervalMinutes?: number;
+  timezone?: string;
+  geminiApiKey?: string;
+}
 
 export default function SetupPage() {
   // Auth state
   const [authStatus, setAuthStatus] = useState<'connected' | 'disconnected' | 'loading'>('loading');
   const [authError, setAuthError] = useState<string | null>(null);
+  const [authLoading, setAuthLoading] = useState(false);
 
   // Settings state
   const [geminiApiKey, setGeminiApiKey] = useState('');
@@ -17,13 +24,9 @@ export default function SetupPage() {
   const [concurrency, setConcurrency] = useState(2);
   const [sendInterval, setSendInterval] = useState(15);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
-
-  // IPC hooks
-  const { invoke: authStart, loading: authLoading } = useIpcInvoke(IPC_CHANNELS.GOOGLE_AUTH_START);
-  const { invoke: authStatusCheck } = useIpcInvoke(IPC_CHANNELS.GOOGLE_AUTH_STATUS);
-  const { invoke: authRevoke } = useIpcInvoke(IPC_CHANNELS.GOOGLE_AUTH_REVOKE);
-  const { invoke: getSettings } = useIpcInvoke<AppSettings>(IPC_CHANNELS.SETTINGS_GET);
-  const { invoke: setSettings } = useIpcInvoke(IPC_CHANNELS.SETTINGS_SET);
+  const [geminiStatus, setGeminiStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
+  const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
+  const [sheetError, setSheetError] = useState<string | null>(null);
 
   // Load settings and auth status on mount
   useEffect(() => {
@@ -35,13 +38,19 @@ export default function SetupPage() {
   useEffect(() => {
     const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
     setSheetId(match ? match[1] : '');
+    setSheetStatus('untested');
+    setSheetError(null);
   }, [sheetUrl]);
+
+  async function ipc<T = any>(channel: string, ...args: any[]): Promise<T> {
+    return await window.electronAPI.invoke(channel, ...args) as T;
+  }
 
   async function checkAuthStatus() {
     try {
-      const result = await authStatusCheck();
-      if (result && typeof result === 'object' && 'connected' in result) {
-        setAuthStatus((result as { connected: boolean }).connected ? 'connected' : 'disconnected');
+      const result = await ipc<{ success: boolean; status?: string }>(IPC_CHANNELS.GOOGLE_AUTH_STATUS);
+      if (result?.success && result.status === 'authenticated') {
+        setAuthStatus('connected');
       } else {
         setAuthStatus('disconnected');
       }
@@ -52,14 +61,15 @@ export default function SetupPage() {
 
   async function loadSettings() {
     try {
-      const settings = await getSettings();
-      if (settings) {
-        const s = settings as AppSettings & { geminiApiKey?: string };
+      const result = await ipc<{ success: boolean; settings?: SavedSettings }>(IPC_CHANNELS.SETTINGS_GET);
+      if (result?.success && result.settings) {
+        const s = result.settings;
         setSheetUrl(s.googleSheetUrl || '');
         setConcurrency(s.concurrency || 2);
         setSendInterval(s.sendIntervalMinutes || 15);
         if (s.geminiApiKey) {
           setGeminiApiKey(s.geminiApiKey);
+          setGeminiStatus('valid'); // Was saved previously, assume valid
         }
       }
     } catch {
@@ -69,32 +79,64 @@ export default function SetupPage() {
 
   async function handleConnect() {
     setAuthError(null);
+    setAuthLoading(true);
     try {
-      const result = await authStart();
-      if (result) {
+      const result = await ipc<{ success: boolean; error?: string }>(IPC_CHANNELS.GOOGLE_AUTH_START);
+      if (result?.success) {
         setAuthStatus('connected');
       } else {
-        setAuthError('Failed to connect Google account. Please try again.');
+        setAuthError(result?.error || 'Failed to connect Google account.');
       }
     } catch (err) {
-      setAuthError(err instanceof Error ? err.message : 'Connection failed');
+      setAuthError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAuthLoading(false);
     }
   }
 
   async function handleDisconnect() {
     setAuthError(null);
     try {
-      await authRevoke();
+      await ipc(IPC_CHANNELS.GOOGLE_AUTH_REVOKE);
       setAuthStatus('disconnected');
     } catch (err) {
       setAuthError(err instanceof Error ? err.message : 'Failed to disconnect');
     }
   }
 
+  async function handleTestGemini() {
+    if (!geminiApiKey) return;
+    setGeminiStatus('testing');
+    try {
+      const result = await ipc<{ success: boolean; error?: string }>(IPC_CHANNELS.GEMINI_TEST_KEY, geminiApiKey);
+      setGeminiStatus(result?.success ? 'valid' : 'invalid');
+    } catch {
+      setGeminiStatus('invalid');
+    }
+  }
+
+  async function handleTestSheet() {
+    if (!sheetId) return;
+    setSheetStatus('testing');
+    setSheetError(null);
+    try {
+      const result = await ipc<{ success: boolean; error?: string }>(IPC_CHANNELS.SHEETS_TEST, sheetId);
+      if (result?.success) {
+        setSheetStatus('connected');
+      } else {
+        setSheetStatus('error');
+        setSheetError(result?.error || 'Could not connect to sheet.');
+      }
+    } catch (err) {
+      setSheetStatus('error');
+      setSheetError(err instanceof Error ? err.message : 'Connection failed');
+    }
+  }
+
   async function handleSave() {
     setSaveStatus('saving');
     try {
-      await setSettings({
+      await ipc(IPC_CHANNELS.SETTINGS_SET, {
         googleSheetUrl: sheetUrl,
         concurrency,
         sendIntervalMinutes: sendInterval,
@@ -148,28 +190,72 @@ export default function SetupPage() {
             <input
               type={showApiKey ? 'text' : 'password'}
               value={geminiApiKey}
-              onChange={(e) => setGeminiApiKey(e.target.value)}
+              onChange={(e) => { setGeminiApiKey(e.target.value); setGeminiStatus('untested'); }}
               placeholder="AIza..."
               className="input"
             />
             <button className="btn btn--icon" onClick={() => setShowApiKey(!showApiKey)}>
               {showApiKey ? 'Hide' : 'Show'}
             </button>
+            <button
+              className="btn btn--outline"
+              onClick={handleTestGemini}
+              disabled={!geminiApiKey || geminiStatus === 'testing'}
+            >
+              {geminiStatus === 'testing' ? 'Testing...' : 'Test Key'}
+            </button>
           </div>
+          {geminiStatus === 'valid' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--green" />
+              <span style={{ color: '#10b981' }}>Valid API key</span>
+            </div>
+          )}
+          {geminiStatus === 'invalid' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--red" />
+              <span style={{ color: '#ef4444' }}>Invalid API key</span>
+            </div>
+          )}
         </div>
 
         {/* Google Sheet URL */}
         <div className="setup-card">
           <h3>Google Sheet URL</h3>
-          <input
-            type="text"
-            value={sheetUrl}
-            onChange={(e) => setSheetUrl(e.target.value)}
-            placeholder="https://docs.google.com/spreadsheets/d/..."
-            className="input input--full"
-          />
+          <div className="input-group">
+            <input
+              type="text"
+              value={sheetUrl}
+              onChange={(e) => setSheetUrl(e.target.value)}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              className="input"
+              style={{ flex: 1 }}
+            />
+            <button
+              className="btn btn--outline"
+              onClick={handleTestSheet}
+              disabled={!sheetId || sheetStatus === 'testing' || authStatus !== 'connected'}
+            >
+              {sheetStatus === 'testing' ? 'Testing...' : 'Test Connection'}
+            </button>
+          </div>
           {sheetId && <p className="hint-text">Sheet ID: {sheetId}</p>}
           {sheetUrl && !sheetId && <p className="error-text">Invalid Google Sheet URL</p>}
+          {!sheetId && authStatus !== 'connected' && sheetUrl && (
+            <p className="hint-text">Connect Google Account first to test the sheet.</p>
+          )}
+          {sheetStatus === 'connected' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--green" />
+              <span style={{ color: '#10b981' }}>Sheet connected — headers verified</span>
+            </div>
+          )}
+          {sheetStatus === 'error' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--red" />
+              <span style={{ color: '#ef4444' }}>{sheetError}</span>
+            </div>
+          )}
         </div>
 
         {/* Scan Settings */}

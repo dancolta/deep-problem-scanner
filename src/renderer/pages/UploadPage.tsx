@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { Lead } from '../../shared/types';
+import { useScan } from '../context/ScanContext';
 import './UploadPage.css';
 
 interface PipelineResult {
@@ -25,11 +26,12 @@ export default function UploadPage() {
   const [parseError, setParseError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [scanAll, setScanAll] = useState(true);
-  const [rangeStart, setRangeStart] = useState(0);
-  const [rangeEnd, setRangeEnd] = useState(0);
+  const [rangeStart, setRangeStart] = useState<number | ''>('');
+  const [rangeEnd, setRangeEnd] = useState<number | ''>('');
   const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const { startScan } = useScan();
 
   const parseFile = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
@@ -38,15 +40,15 @@ export default function UploadPage() {
     setIsLoading(true);
 
     try {
-      const filePath = (selectedFile as any).path;
-      if (!filePath) {
-        setParseError('Could not read file path. Please ensure you are running in Electron.');
+      const content = await selectedFile.text();
+      if (!content) {
+        setParseError('File is empty.');
         return;
       }
 
       const response = await window.electronAPI.invoke(
         IPC_CHANNELS.CSV_PARSE,
-        filePath
+        content
       ) as ParseResponse;
 
       if (response.success && response.result) {
@@ -111,7 +113,9 @@ export default function UploadPage() {
   const getLeadsToScan = useCallback((): Lead[] => {
     if (!parseResult) return [];
     if (scanAll) return parseResult.leads;
-    return parseResult.leads.slice(rangeStart, rangeEnd + 1);
+    const start = rangeStart === '' ? 0 : rangeStart;
+    const end = rangeEnd === '' ? parseResult.leads.length - 1 : rangeEnd;
+    return parseResult.leads.slice(start, end + 1);
   }, [parseResult, scanAll, rangeStart, rangeEnd]);
 
   const getDisplayLeads = useCallback((): Lead[] => {
@@ -126,21 +130,20 @@ export default function UploadPage() {
     try {
       const settingsResponse = await window.electronAPI.invoke(
         IPC_CHANNELS.SETTINGS_GET
-      ) as { googleSheetUrl?: string } | null;
+      ) as { success?: boolean; settings?: { googleSheetUrl?: string } } | null;
 
-      const spreadsheetId = settingsResponse?.googleSheetUrl || '';
+      const sheetUrl = settingsResponse?.settings?.googleSheetUrl || '';
+      const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      const spreadsheetId = match ? match[1] : '';
 
-      await window.electronAPI.invoke(IPC_CHANNELS.SCAN_START, {
-        leads,
-        spreadsheetId,
-      });
-
+      // Fire-and-forget via context — navigates immediately
+      startScan(leads, spreadsheetId);
       navigate('/scan');
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to start scan';
       setParseError(message);
     }
-  }, [getLeadsToScan, navigate]);
+  }, [getLeadsToScan, navigate, startScan]);
 
   return (
     <div className="page upload-page">
@@ -203,7 +206,7 @@ export default function UploadPage() {
             <tbody>
               {getDisplayLeads().map((lead, i) => (
                 <tr key={i}>
-                  <td>{i + 1 + (scanAll ? 0 : rangeStart)}</td>
+                  <td>{i + 1 + (scanAll ? 0 : (rangeStart || 0))}</td>
                   <td>{lead.company_name}</td>
                   <td className="url-cell">{lead.website_url}</td>
                   <td>{lead.contact_name}</td>
@@ -237,7 +240,10 @@ export default function UploadPage() {
                   value={rangeStart}
                   min={0}
                   max={parseResult.leads.length - 1}
-                  onChange={(e) => setRangeStart(parseInt(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRangeStart(val === '' ? '' : parseInt(val));
+                  }}
                   className="input input--small"
                 />
               </div>
@@ -246,13 +252,16 @@ export default function UploadPage() {
                 <input
                   type="number"
                   value={rangeEnd}
-                  min={rangeStart}
+                  min={rangeStart === '' ? 0 : rangeStart}
                   max={parseResult.leads.length - 1}
-                  onChange={(e) => setRangeEnd(parseInt(e.target.value) || 0)}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setRangeEnd(val === '' ? '' : parseInt(val));
+                  }}
                   className="input input--small"
                 />
               </div>
-              <p className="range-count">Will scan {Math.max(rangeEnd - rangeStart + 1, 0)} leads</p>
+              <p className="range-count">Will scan {Math.max((rangeEnd === '' ? 0 : rangeEnd) - (rangeStart === '' ? 0 : rangeStart) + 1, 0)} leads</p>
             </div>
           )}
         </div>

@@ -8,6 +8,7 @@ export interface AnnotationCoord {
   label: string;
   severity: AnnotationSeverity;
   description: string;
+  conversionImpact?: string; // Stat showing business impact (e.g., "Up to 50% bounce increase")
 }
 
 export interface AnnotationResult {
@@ -23,17 +24,19 @@ export interface AnnotationOptions {
 }
 
 export const DEFAULT_ANNOTATION_OPTIONS: AnnotationOptions = {
-  maxAnnotations: 5,
-  screenshotWidth: 1440,
-  screenshotHeight: 900,
+  maxAnnotations: 4,
+  screenshotWidth: 1920,
+  screenshotHeight: 1080,
 };
 
 export interface AnnotatedImage {
   buffer: Buffer;
+  emailBuffer: Buffer;
   filename: string;
   sizeKB: number;
   format: string;
   annotationCount: number;
+  annotationLabels: string[];
   width: number;
   height: number;
 }

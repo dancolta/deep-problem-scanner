@@ -37,6 +37,14 @@ export const IPC_CHANNELS = {
   SCHEDULER_STATUS: 'scheduler:status',
   SCHEDULER_PROGRESS: 'scheduler:progress',
 
+  // Gemini
+  GEMINI_TEST_KEY: 'gemini:test-key',
+
+  SHEETS_UPDATE_ROW: 'sheets:update-row',
+
+  // Sheet test
+  SHEETS_TEST: 'sheets:test',
+
   // App
   APP_READY: 'app:ready',
   APP_ERROR: 'app:error',

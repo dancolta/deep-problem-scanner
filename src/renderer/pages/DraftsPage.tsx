@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useIpcInvoke } from '../hooks/useIpc';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { SheetRow, AppSettings } from '../../shared/types';
 import './DraftsPage.css';
@@ -47,44 +46,113 @@ export default function DraftsPage() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editSubject, setEditSubject] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
+  const [spreadsheetId, setSpreadsheetId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  const { invoke: getSettings, loading: settingsLoading, error: settingsError } =
-    useIpcInvoke<AppSettings>(IPC_CHANNELS.SETTINGS_GET);
-  const { invoke: readSheet, loading: sheetLoading, error: sheetError } =
-    useIpcInvoke<SheetRow[]>(IPC_CHANNELS.SHEETS_READ);
+  const loadFromSheet = useCallback(async (): Promise<number> => {
+    setError(null);
+    try {
+      const settingsResp = await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_GET) as any;
+      const settings: AppSettings | undefined = settingsResp?.settings ?? settingsResp;
+      if (!settings?.googleSheetUrl) {
+        setError('No Google Sheet URL configured. Go to Setup first.');
+        return 0;
+      }
+      const sid = extractSpreadsheetId(settings.googleSheetUrl);
+      if (!sid) {
+        setError('Invalid Google Sheet URL in settings.');
+        return 0;
+      }
+      setSpreadsheetId(sid);
 
-  const loading = settingsLoading || sheetLoading;
-  const error = settingsError || sheetError;
+      const sheetsResp = await window.electronAPI.invoke(IPC_CHANNELS.SHEETS_READ, sid) as any;
+      if (!sheetsResp?.success) {
+        setError(sheetsResp?.error || 'Failed to read sheet data.');
+        return 0;
+      }
+      const rows: SheetRow[] = sheetsResp.rows ?? [];
+      setDrafts(rows.map(mapRowToDraft));
+      return rows.length;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Unknown error loading sheet data.');
+      return 0;
+    }
+  }, []);
 
   useEffect(() => {
     (async () => {
-      const settings = await getSettings();
-      if (!settings?.googleSheetUrl) return;
-      const spreadsheetId = extractSpreadsheetId(settings.googleSheetUrl);
-      if (!spreadsheetId) return;
-      const rows = await readSheet(spreadsheetId);
-      if (rows) {
-        setDrafts(rows.map(mapRowToDraft));
-      }
+      await loadFromSheet();
+      setLoading(false);
     })();
-    // Run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const handleSync = useCallback(async () => {
+    setSyncing(true);
+    setSyncMessage(null);
+    try {
+      const count = await loadFromSheet();
+      setSyncMessage(`Synced ${count} rows from sheet.`);
+      setTimeout(() => setSyncMessage(null), 3000);
+    } finally {
+      setSyncing(false);
+    }
+  }, [loadFromSheet]);
 
   const filtered = useMemo(() => {
     if (filter === 'all') return drafts;
     return drafts.filter((d) => d.status === filter);
   }, [drafts, filter]);
 
-  const approveAll = useCallback(() => {
-    setDrafts((prev) =>
-      prev.map((d) => (d.status === 'draft' ? { ...d, status: 'approved' as DraftStatus } : d))
-    );
-  }, []);
+  const updateSheetRow = useCallback(
+    async (rowIndex: number, updates: Record<string, string>) => {
+      if (!spreadsheetId) {
+        console.error('[DraftsPage] No spreadsheetId — cannot update row');
+        return;
+      }
+      try {
+        console.log('[DraftsPage] Updating row', rowIndex, updates);
+        const result = await window.electronAPI.invoke(IPC_CHANNELS.SHEETS_UPDATE_ROW, {
+          spreadsheetId,
+          rowIndex,
+          updates,
+        }) as any;
+        if (!result?.success) {
+          console.error('[DraftsPage] Sheet update failed:', result?.error);
+        }
+      } catch (err) {
+        console.error('[DraftsPage] Failed to update sheet row:', err);
+      }
+    },
+    [spreadsheetId]
+  );
 
-  const setDraftStatus = useCallback((id: number, status: DraftStatus) => {
-    setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)));
-  }, []);
+  const approveAll = useCallback(async () => {
+    const draftIds: number[] = [];
+    setDrafts((prev) =>
+      prev.map((d) => {
+        if (d.status === 'draft') {
+          draftIds.push(d.id);
+          return { ...d, status: 'approved' as DraftStatus };
+        }
+        return d;
+      })
+    );
+    for (const id of draftIds) {
+      await updateSheetRow(id, { email_status: 'approved' });
+    }
+  }, [updateSheetRow]);
+
+  const setDraftStatus = useCallback(
+    async (id: number, status: DraftStatus) => {
+      setDrafts((prev) => prev.map((d) => (d.id === id ? { ...d, status } : d)));
+      await updateSheetRow(id, { email_status: status });
+    },
+    [updateSheetRow]
+  );
 
   const startEdit = useCallback((draft: LocalDraft) => {
     setEditingId(draft.id);
@@ -96,15 +164,16 @@ export default function DraftsPage() {
     setEditingId(null);
   }, []);
 
-  const saveEdit = useCallback(() => {
+  const saveEdit = useCallback(async () => {
     if (editingId === null) return;
     setDrafts((prev) =>
       prev.map((d) =>
         d.id === editingId ? { ...d, subject: editSubject, body: editBody } : d
       )
     );
+    await updateSheetRow(editingId, { email_subject: editSubject, email_body: editBody });
     setEditingId(null);
-  }, [editingId, editSubject, editBody]);
+  }, [editingId, editSubject, editBody, updateSheetRow]);
 
   const badgeClass = (status: DraftStatus) => {
     if (status === 'approved') return 'badge-approved';
@@ -132,10 +201,13 @@ export default function DraftsPage() {
     );
   }
 
-  if (error) {
+  if (error && drafts.length === 0) {
     return (
       <div className="drafts-page">
         <div className="drafts-error">Error: {error}</div>
+        <button className="btn-sync" onClick={handleSync} disabled={syncing} style={{ marginTop: '1rem' }}>
+          {syncing ? 'Syncing...' : 'Retry Sync'}
+        </button>
       </div>
     );
   }
@@ -162,6 +234,9 @@ export default function DraftsPage() {
           Showing {filtered.length} of {drafts.length} drafts
         </span>
         <div className="drafts-bulk-actions">
+          <button className="btn-sync" onClick={handleSync} disabled={syncing}>
+            {syncing ? 'Syncing...' : 'Sync with Sheet'}
+          </button>
           <button className="btn-approve-all" onClick={approveAll}>
             Approve All Drafts
           </button>
@@ -170,6 +245,13 @@ export default function DraftsPage() {
           </button>
         </div>
       </div>
+
+      {syncMessage && (
+        <div className="banner banner--success" style={{ marginBottom: '1rem' }}>{syncMessage}</div>
+      )}
+      {error && (
+        <div className="banner banner--error" style={{ marginBottom: '1rem' }}>{error}</div>
+      )}
 
       {filtered.length === 0 ? (
         <div className="drafts-empty">No drafts to display.</div>

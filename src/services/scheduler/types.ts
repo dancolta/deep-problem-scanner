@@ -15,6 +15,9 @@ export interface SchedulerConfig {
   intervalMinutes: number; // default 15
   timezone: string;
   maxRetries: number; // default 3
+  startHour: number; // default 9
+  endHour: number; // default 17
+  distributionPattern: 'spread' | 'burst'; // default 'spread'
 }
 
 export interface SchedulerStatus {

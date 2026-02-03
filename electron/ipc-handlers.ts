@@ -4,6 +4,41 @@ import * as path from 'path';
 import { IPC_CHANNELS } from '../src/shared/ipc-channels';
 import { ServiceRegistry } from './service-registry';
 import { buildPromptContext, buildDiagnosticsSummary } from '../src/services/email/prompt-template';
+import { analyzePageSections, SectionIssue } from '../src/services/annotation/gemini-vision';
+import { drawAnnotations } from '../src/services/annotation/drawing';
+import { compressImage, compressForEmail } from '../src/services/annotation/compression';
+import { AnnotationCoord } from '../src/services/annotation/types';
+
+// Fallback selectors for common sections
+const SECTION_FALLBACKS: Record<string, string[]> = {
+  hero: ['.hero', '[class*="hero"]', 'main > section:first-child', 'section:first-of-type', '.banner'],
+  cta: ['[class*="cta"]', '.call-to-action', 'section:has(button.primary)'],
+  trust: ['[class*="trust"]', '[class*="client"]', '[class*="partner"]', '[class*="logo-section"]'],
+  testimonials: ['[class*="testimonial"]', '[class*="review"]'],
+  navigation: ['nav', 'header', '[class*="nav"]'],
+  pricing: ['[class*="pricing"]', '[class*="plan"]'],
+  footer: ['footer', '[class*="footer"]'],
+};
+
+// Fallback element selectors based on issue keywords
+const ELEMENT_FALLBACKS: Record<string, string> = {
+  headline: 'h1, .hero h1, section:first-of-type h1, [class*="title"]:first-of-type, [class*="heading"]:first-of-type',
+  cta: 'a[href*="start"], a[href*="demo"], a[href*="contact"], a[href*="signup"], button.primary, .btn-primary, [class*="cta"] a, [class*="cta"] button',
+  button: 'button, .btn, [role="button"], a[class*="button"], a[class*="btn"]',
+  trust: '[class*="logo"] img, [class*="client"] img, [class*="partner"], [class*="trust"]',
+  navigation: 'nav, header nav, [class*="nav"]:not(footer *)',
+  value: 'h1, h2:first-of-type, [class*="subtitle"], [class*="tagline"]',
+};
+
+function getElementFallbackSelector(issueLabel: string): string | undefined {
+  const labelLower = issueLabel.toLowerCase();
+  for (const [keyword, selector] of Object.entries(ELEMENT_FALLBACKS)) {
+    if (labelLower.includes(keyword)) {
+      return selector;
+    }
+  }
+  return undefined;
+}
 
 export function registerAllHandlers(): void {
   const registry = ServiceRegistry.getInstance();
@@ -37,17 +72,14 @@ export function registerAllHandlers(): void {
   });
 
   // --- CSV ---
-  ipcMain.handle(IPC_CHANNELS.CSV_PARSE, async (_event, filePath: string) => {
+  ipcMain.handle(IPC_CHANNELS.CSV_PARSE, async (_event, content: string) => {
     try {
-      const content = await fs.readFile(filePath, 'utf-8');
-      // Try to get sheets for duplicate checking
       let sheets;
       try {
         sheets = await registry.getSheets();
       } catch {
-        /* Not authenticated yet, skip sheets check */
+        /* Not authenticated yet */
       }
-
       const pipeline = registry.getLeadPipeline(sheets);
       const result = await pipeline.processUpload(content);
       return { success: true, result };
@@ -87,17 +119,66 @@ export function registerAllHandlers(): void {
     }
   });
 
-  // --- Scan (full pipeline) ---
+  // --- Gemini ---
+  ipcMain.handle(IPC_CHANNELS.GEMINI_TEST_KEY, async (_event, apiKey: string) => {
+    try {
+      const { GoogleGenerativeAI } = require('@google/generative-ai');
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+      const result = await model.generateContent('Reply with only the word OK');
+      const text = result.response.text();
+      return { success: true, response: text.trim() };
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      if (msg.includes('API_KEY_INVALID') || msg.includes('401')) {
+        return { success: false, error: 'Invalid API key' };
+      }
+      return { success: false, error: msg };
+    }
+  });
+
+  // --- Sheets test ---
+  ipcMain.handle(IPC_CHANNELS.SHEETS_TEST, async (_event, spreadsheetId: string) => {
+    try {
+      const sheets = await registry.getSheets();
+      await sheets.ensureHeaders(spreadsheetId);
+      return { success: true };
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      if (msg.includes('404') || msg.includes('not found')) {
+        return { success: false, error: 'Sheet not found. Check the URL.' };
+      }
+      if (msg.includes('403') || msg.includes('permission')) {
+        return { success: false, error: 'No access. Make sure you own or have edit access to this sheet.' };
+      }
+      return { success: false, error: msg };
+    }
+  });
+
+  // --- Scan (full pipeline with section-based screenshots) ---
   ipcMain.handle(
     IPC_CHANNELS.SCAN_START,
     async (event, { leads, spreadsheetId }: { leads: any[]; spreadsheetId?: string }) => {
       try {
+        // Sync Gemini API key from settings.json → process.env
+        try {
+          const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+          const settingsContent = await fs.readFile(settingsPath, 'utf-8');
+          const settings = JSON.parse(settingsContent);
+          if (settings.geminiApiKey) {
+            process.env.GEMINI_API_KEY = settings.geminiApiKey;
+            console.log('[IPC] Synced GEMINI_API_KEY from settings.json');
+          }
+        } catch {
+          // settings.json may not exist yet
+        }
+
         const scanner = registry.scanner;
         await scanner.initialize();
 
         const drive = await registry.getDrive();
         const sheets = await registry.getSheets();
-        const annotation = registry.annotation;
+        const gmail = await registry.getAuthenticatedGmail();
         const emailGen = registry.emailGenerator;
 
         const results: any[] = [];
@@ -112,71 +193,195 @@ export function registerAllHandlers(): void {
             completed: i,
             failed: results.filter((r: any) => r.scanStatus === 'FAILED').length,
             currentUrl: lead.website_url,
-            results,
           });
 
           try {
-            // 1. Scan homepage
-            const scanResult = await scanner.scanHomepage(lead.website_url);
+            // 1. Open page and get viewport screenshot
+            console.time(`[IPC] scan-${i}`);
+            const session = await scanner.openPageForAnalysis(lead.website_url);
+            console.timeEnd(`[IPC] scan-${i}`);
 
-            if (scanResult.status !== 'SUCCESS' || !scanResult.screenshot) {
-              results.push({
-                lead,
-                scanStatus: scanResult.status,
-                error: scanResult.error,
-              });
+            if (!session) {
+              results.push({ lead, scanStatus: 'FAILED', error: 'Could not open page' });
               continue;
             }
 
-            // 2. Annotate screenshot
-            const slug = lead.company_name
-              .toLowerCase()
-              .replace(/[^a-z0-9]/g, '-')
-              .substring(0, 50);
-            const annotated = await annotation.annotateScreenshot(
-              scanResult.screenshot,
-              scanResult.diagnostics,
-              lead.website_url,
-              slug
+            // 2. Analyze with Gemini - get section-based issues
+            console.time(`[IPC] analyze-${i}`);
+            const analysis = await analyzePageSections(
+              session.viewportScreenshot,
+              session.diagnostics,
+              lead.website_url
             );
+            console.timeEnd(`[IPC] analyze-${i}`);
 
-            // 3. Upload to Drive
-            const driveResult = await drive.uploadScreenshot(annotated.buffer, annotated.filename);
+            console.log(`[IPC] Found ${analysis.sections.length} section issues`);
 
-            // 4. Generate email
+            // 3. Capture section screenshots and annotate
+            const sectionScreenshots: { buffer: Buffer; label: string; description: string; impact: string }[] = [];
+
+            for (const section of analysis.sections.slice(0, 2)) {
+              console.time(`[IPC] section-${section.section}`);
+
+              // Get fallback selectors for this section type
+              const fallbacks = SECTION_FALLBACKS[section.section] || [];
+
+              // Build element selector with fallbacks
+              const issueLabel = section.issue?.label || '';
+              const primaryElementSelector = section.issue?.elementSelector;
+              const fallbackElementSelector = getElementFallbackSelector(issueLabel);
+              const combinedElementSelector = [primaryElementSelector, fallbackElementSelector]
+                .filter(Boolean)
+                .join(', ');
+
+              console.log(`[IPC] Looking for element with selectors: ${combinedElementSelector}`);
+
+              // Capture the section with element bounds
+              const sectionCapture = await scanner.captureSectionScreenshot(
+                session.page,
+                section.sectionSelector,
+                fallbacks,
+                combinedElementSelector || undefined
+              );
+
+              if (sectionCapture) {
+                // Use element bounds if found, otherwise smart fallback based on section type
+                let annotationBounds: { x: number; y: number; width: number; height: number };
+                const { imageWidth, imageHeight } = sectionCapture;
+
+                console.log(`[IPC] Screenshot dimensions: ${imageWidth}x${imageHeight}`);
+
+                if (sectionCapture.elementBounds) {
+                  // Element found - use its bounds directly
+                  annotationBounds = sectionCapture.elementBounds;
+                  console.log(`[IPC] Using element bounds for annotation: (${annotationBounds.x}, ${annotationBounds.y}) ${annotationBounds.width}x${annotationBounds.height}`);
+                } else {
+                  // Fallback: estimate position based on common layout patterns
+                  // Most headlines/CTAs are centered horizontally in the upper-middle portion
+                  annotationBounds = {
+                    x: Math.round(imageWidth * 0.2), // Start at 20% from left
+                    y: Math.round(imageHeight * 0.25), // Start at 25% from top
+                    width: Math.round(imageWidth * 0.6), // Cover 60% width (centered)
+                    height: Math.round(imageHeight * 0.25), // Cover 25% height
+                  };
+                  console.log(`[IPC] Using fallback bounds for annotation: (${annotationBounds.x}, ${annotationBounds.y}) ${annotationBounds.width}x${annotationBounds.height}`);
+                }
+
+                // Create annotation
+                const annotation: AnnotationCoord = {
+                  x: annotationBounds.x,
+                  y: annotationBounds.y,
+                  width: annotationBounds.width,
+                  height: annotationBounds.height,
+                  label: section.issue?.label || 'Issue Detected',
+                  severity: (section.issue?.severity as any) || 'warning',
+                  description: section.issue?.description || '',
+                  conversionImpact: section.issue?.conversionImpact,
+                };
+
+                // Draw annotation on section screenshot
+                const annotatedBuffer = await drawAnnotations(sectionCapture.buffer, [annotation]);
+
+                // Compress for email
+                const compressedBuffer = await compressForEmail(annotatedBuffer, 400, 1200);
+
+                sectionScreenshots.push({
+                  buffer: compressedBuffer,
+                  label: section.issue?.label || 'Issue',
+                  description: section.issue?.description || '',
+                  impact: section.issue?.conversionImpact || '',
+                });
+
+                console.log(`[IPC] Captured section "${section.section}" with annotation`);
+              }
+
+              console.timeEnd(`[IPC] section-${section.section}`);
+            }
+
+            // Close the page session
+            await scanner.closePageSession(session);
+
+            // 4. Upload screenshots to Drive
+            console.time(`[IPC] drive-${i}`);
+            const slug = lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 50);
+            const dateStr = new Date().toISOString().split('T')[0];
+            const driveResults: { directLink: string; fileId: string }[] = [];
+
+            for (let j = 0; j < sectionScreenshots.length; j++) {
+              const ss = sectionScreenshots[j];
+              const filename = `${slug}_issue_${j + 1}_${dateStr}.png`;
+              const driveResult = await drive.uploadScreenshot(ss.buffer, filename);
+              driveResults.push({ directLink: driveResult.directLink, fileId: driveResult.fileId });
+            }
+            console.timeEnd(`[IPC] drive-${i}`);
+
+            // 5. Generate email with issue details
+            console.time(`[IPC] email-${i}`);
+            const issueLabels = sectionScreenshots.map(s => s.label);
             const promptContext = buildPromptContext({
               companyName: lead.company_name,
               contactName: lead.contact_name,
               websiteUrl: lead.website_url,
-              diagnostics: scanResult.diagnostics,
-              screenshotUrl: driveResult.directLink,
-              annotationLabels: [],
+              diagnostics: session.diagnostics,
+              screenshotUrl: driveResults[0]?.directLink || '',
+              annotationLabels: issueLabels,
             });
 
             const email = await emailGen.generateEmail(promptContext);
+            console.timeEnd(`[IPC] email-${i}`);
 
-            // 5. Build sheet row
-            const sheetRow = {
+            // 6. Build sheet row
+            const sheetRow: Record<string, any> = {
               company_name: lead.company_name,
               website_url: lead.website_url,
               contact_name: lead.contact_name,
               contact_email: lead.contact_email,
-              scan_status: scanResult.status,
-              screenshot_url: driveResult.directLink,
-              diagnostics_summary: buildDiagnosticsSummary(scanResult.diagnostics),
+              scan_status: 'SUCCESS',
+              screenshot_url: driveResults.map(r => r.directLink).join(' | '),
+              diagnostics_summary: buildDiagnosticsSummary(session.diagnostics),
               email_subject: email.subject,
               email_body: email.body,
               email_status: 'draft' as const,
             };
 
-            results.push({ lead, scanStatus: 'SUCCESS', sheetRow, email, driveResult });
+            // 7. Create Gmail draft with embedded images
+            if (sectionScreenshots.length > 0) {
+              const draftPayload = {
+                to: lead.contact_email,
+                subject: email.subject,
+                body: email.body,
+                screenshotDriveUrl: driveResults[0]?.directLink || '',
+                leadData: lead,
+                status: 'draft' as const,
+              };
+
+              gmail.createDraft(draftPayload, sectionScreenshots[0].buffer).then(
+                (draftResult) => {
+                  sheetRow.draft_id = draftResult.draftId;
+                  console.log(`[IPC] Gmail draft created: ${draftResult.draftId}`);
+                },
+                (draftError) => {
+                  console.error(`[IPC] Gmail draft failed:`, draftError);
+                }
+              );
+            }
+
+            results.push({
+              lead,
+              scanStatus: 'SUCCESS',
+              sheetRow,
+              email,
+              driveResults,
+              issueCount: sectionScreenshots.length,
+            });
+
           } catch (error) {
             console.error(`[IPC] Scan failed for ${lead.website_url}:`, error);
             results.push({ lead, scanStatus: 'FAILED', error: String(error) });
           }
         }
 
-        // 6. Append all successful results to Sheet
+        // 8. Append all successful results to Sheet
         const successRows = results.filter((r: any) => r.sheetRow).map((r: any) => r.sheetRow);
 
         if (successRows.length > 0 && spreadsheetId) {
@@ -197,7 +402,6 @@ export function registerAllHandlers(): void {
   );
 
   ipcMain.handle(IPC_CHANNELS.SCAN_CANCEL, async () => {
-    // Set a cancel flag - scanner will check this
     return { success: true };
   });
 
@@ -212,69 +416,128 @@ export function registerAllHandlers(): void {
     }
   });
 
-  ipcMain.handle(
-    IPC_CHANNELS.SHEETS_CHECK_DUPLICATES,
-    async (_event, { spreadsheetId, urls }: { spreadsheetId: string; urls: string[] }) => {
-      try {
-        const sheets = await registry.getSheets();
-        const duplicates = await sheets.checkDuplicates(spreadsheetId, urls);
-        return { success: true, duplicates };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    }
-  );
-
-  // --- Drive ---
-  ipcMain.handle(
-    IPC_CHANNELS.DRIVE_UPLOAD,
-    async (_event, { buffer, filename }: { buffer: number[]; filename: string }) => {
-      try {
-        const drive = await registry.getDrive();
-        const result = await drive.uploadScreenshot(Buffer.from(buffer), filename);
-        return { success: true, result };
-      } catch (error) {
-        return { success: false, error: String(error) };
-      }
-    }
-  );
-
-  // --- Gmail ---
-  ipcMain.handle(IPC_CHANNELS.GMAIL_CREATE_DRAFT, async (_event, args: any) => {
+  ipcMain.handle(IPC_CHANNELS.SHEETS_UPDATE_ROW, async (_event, spreadsheetId: string, rowIndex: number, updates: Record<string, any>) => {
     try {
-      const gmail = await registry.getAuthenticatedGmail();
-      const result = await gmail.createDraft(args.draft);
-      return { success: true, ...result };
+      const sheets = await registry.getSheets();
+      console.log(`[IPC] Updating row ${rowIndex} with:`, updates);
+      await sheets.updateRowStatus(spreadsheetId, rowIndex, updates as any);
+      return { success: true };
     } catch (error) {
-      return { success: false, error: String(error) };
-    }
-  });
-
-  ipcMain.handle(IPC_CHANNELS.GMAIL_SEND, async (_event, args: any) => {
-    try {
-      const gmail = await registry.getAuthenticatedGmail();
-      const result = await gmail.sendDraft(args.draftId);
-      return { success: true, ...result };
-    } catch (error) {
+      console.error('[IPC] SHEETS_UPDATE_ROW error:', error);
       return { success: false, error: String(error) };
     }
   });
 
   // --- Scheduler ---
-  ipcMain.handle(IPC_CHANNELS.SCHEDULER_START, async () => {
+  ipcMain.handle(IPC_CHANNELS.SCHEDULER_START, async (event, config?: any) => {
     try {
-      const scheduler = registry.getScheduler();
+      const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+      const settingsContent = await fs.readFile(settingsPath, 'utf-8');
+      const settings = JSON.parse(settingsContent);
+
+      if (!settings.googleSheetUrl) {
+        return { success: false, error: 'No Google Sheet URL configured' };
+      }
+
+      const match = settings.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+      const spreadsheetId = match ? match[1] : settings.googleSheetUrl;
+
+      const sheets = await registry.getSheets();
       const gmail = await registry.getAuthenticatedGmail();
-      // Set event callback to forward to renderer
-      scheduler.onEvent = (event) => {
-        const wins = BrowserWindow.getAllWindows();
-        wins.forEach(w => w.webContents.send(IPC_CHANNELS.SCHEDULER_PROGRESS, event));
+      const rows = await sheets.readRows(spreadsheetId);
+
+      // Filter for draft or approved emails
+      const drafts = rows.filter((r: any) =>
+        r.email_status === 'draft' || r.email_status === 'approved'
+      );
+
+      if (drafts.length === 0) {
+        return { success: false, error: 'No draft emails to schedule' };
+      }
+
+      // Calculate scheduled times
+      const startDate = config?.scheduleStartDate || new Date().toISOString().split('T')[0];
+      const startHour = config?.scheduleStartHour ?? settings.scheduleStartHour ?? 9;
+      const endHour = config?.scheduleEndHour ?? settings.scheduleEndHour ?? 17;
+      const emailsPerHour = config?.emailsPerHour ?? settings.emailsPerHour ?? 4;
+
+      const intervalMinutes = Math.max(5, Math.floor(60 / emailsPerHour));
+
+      const schedulerConfig = {
+        intervalMinutes,
+        timezone: settings.timezone || 'America/New_York',
+        maxRetries: 3,
+        startHour,
+        endHour,
+        distributionPattern: config?.distributionPattern ?? settings.distributionPattern ?? 'spread',
       };
-      // Load approved/scheduled emails from Sheet if available
-      // Add to queue and start
-      scheduler.start();
-      return { success: true, status: scheduler.getStatus() };
+
+      const scheduler = registry.getScheduler(schedulerConfig);
+
+      // Calculate start time
+      const startDateTime = new Date(`${startDate}T${String(startHour).padStart(2, '0')}:00:00`);
+      const startTime = startDateTime.getTime();
+
+      // Convert drafts to EmailDraft format and schedule
+      const emailDrafts = drafts.map((row: any, index: number) => {
+        const scheduledTime = new Date(startTime + index * intervalMinutes * 60_000);
+
+        // Update sheet row with scheduled status
+        const rowIndex = rows.indexOf(row);
+        if (rowIndex >= 0) {
+          sheets.updateRowStatus(spreadsheetId, rowIndex, {
+            email_status: 'scheduled',
+            scheduled_time: scheduledTime.toISOString(),
+          } as any).catch((err: any) => console.error('[IPC] Failed to update row:', err));
+        }
+
+        return {
+          to: row.contact_email,
+          subject: row.email_subject,
+          body: row.email_body,
+          screenshotDriveUrl: row.screenshot_url,
+          leadData: {
+            company_name: row.company_name,
+            contact_name: row.contact_name,
+            website_url: row.website_url,
+            contact_email: row.contact_email,
+          },
+          status: 'scheduled' as const,
+        };
+      });
+
+      scheduler.addToQueue(emailDrafts as any, startTime);
+
+      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${startDateTime.toISOString()})`);
+
+      // Start the scheduler with send function
+      const sendFn = async (draft: any) => {
+        const result = await gmail.createDraft(draft);
+        const sendResult = await gmail.sendDraft(result.draftId);
+
+        // Update sheet row to 'sent'
+        const rowIndex = rows.findIndex((r: any) => r.contact_email === draft.to);
+        if (rowIndex >= 0) {
+          await sheets.updateRowStatus(spreadsheetId, rowIndex, {
+            email_status: 'sent',
+            sent_time: new Date().toISOString(),
+          } as any);
+        }
+
+        return { draftId: result.draftId, messageId: sendResult.messageId };
+      };
+
+      scheduler.start(sendFn as any);
+
+      // Send progress events to renderer
+      const window = BrowserWindow.fromWebContents(event.sender);
+      scheduler.onEvent = (evt) => {
+        window?.webContents.send(IPC_CHANNELS.SCHEDULER_PROGRESS, evt);
+      };
+
+      return { success: true, queueSize: emailDrafts.length };
     } catch (error) {
+      console.error('[IPC] SCHEDULER_START error:', error);
       return { success: false, error: String(error) };
     }
   });
@@ -283,7 +546,7 @@ export function registerAllHandlers(): void {
     try {
       const scheduler = registry.getScheduler();
       scheduler.stop();
-      return { success: true, status: scheduler.getStatus() };
+      return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
     }
@@ -292,14 +555,12 @@ export function registerAllHandlers(): void {
   ipcMain.handle(IPC_CHANNELS.SCHEDULER_STATUS, async () => {
     try {
       const scheduler = registry.getScheduler();
-      return { success: true, status: scheduler.getStatus() };
+      const status = scheduler.getStatus();
+      return { success: true, status };
     } catch (error) {
       return { success: false, error: String(error) };
     }
   });
 
-  // SCHEDULER_PROGRESS is a renderer-bound event (sent via webContents.send), not a handle
-  ipcMain.handle(IPC_CHANNELS.SCHEDULER_PROGRESS, async () => {
-    return { success: true, message: 'Progress events are pushed to renderer via webContents.send' };
-  });
+  console.log('IPC handlers registered successfully');
 }

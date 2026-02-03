@@ -3,7 +3,11 @@ import * as path from "path";
 import { config } from "dotenv";
 import { registerAllHandlers } from "./ipc-handlers";
 
-config();
+const envPath = path.resolve(__dirname, '../../../.env');
+console.log('__dirname:', __dirname);
+console.log('.env path:', envPath);
+const envResult = config({ path: envPath });
+console.log('dotenv result:', envResult.error ? envResult.error.message : 'loaded', 'GOOGLE_CLIENT_ID set:', !!process.env.GOOGLE_CLIENT_ID);
 
 process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason);
@@ -32,7 +36,7 @@ function createWindow(): void {
     mainWindow.loadURL("http://localhost:8080");
     mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, "../renderer/index.html"));
+    mainWindow.loadFile(path.join(__dirname, "../../renderer/index.html"));
   }
 
   mainWindow.on("closed", () => {
@@ -42,7 +46,12 @@ function createWindow(): void {
 
 app.whenReady().then(() => {
   console.log(`Deep Problem Scanner v${app.getVersion()}`);
-  registerAllHandlers();
+  try {
+    registerAllHandlers();
+    console.log('IPC handlers registered successfully');
+  } catch (err) {
+    console.error('Failed to register IPC handlers:', err);
+  }
   createWindow();
 });
 

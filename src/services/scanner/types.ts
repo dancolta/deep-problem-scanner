@@ -21,13 +21,13 @@ export interface ScanResult {
 export interface ScanOptions {
   concurrency: number; // 1-5
   timeoutMs: number; // default 30000
-  viewportWidth: number; // default 1440
-  viewportHeight: number; // default 900
+  viewportWidth: number; // default 1920
+  viewportHeight: number; // default 1080
 }
 
 export const DEFAULT_SCAN_OPTIONS: ScanOptions = {
   concurrency: 2,
   timeoutMs: 30000,
-  viewportWidth: 1440,
-  viewportHeight: 900,
+  viewportWidth: 1920,
+  viewportHeight: 1080,
 };

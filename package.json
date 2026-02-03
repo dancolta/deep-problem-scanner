@@ -2,7 +2,7 @@
   "name": "deep-problem-scanner",
   "version": "1.0.0",
   "description": "Desktop app that scans websites, annotates screenshots with problems, and automates personalized outreach emails",
-  "main": "dist/main/main.js",
+  "main": "dist/main/electron/main.js",
   "scripts": {
     "dev": "webpack serve --config webpack.config.js & electron .",
     "build": "webpack --mode production && tsc -p tsconfig.main.json",
@@ -17,6 +17,7 @@
     "dotenv": "^16.4.7",
     "electron": "^33.2.1",
     "googleapis": "^144.0.0",
+    "playwright": "^1.58.1",
     "puppeteer": "^23.11.1",
     "puppeteer-extra": "^3.3.6",
     "puppeteer-extra-plugin-stealth": "^2.11.2",
@@ -26,15 +27,20 @@
     "sharp": "^0.33.5"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.10.5",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "css-loader": "^7.1.2",
     "electron-builder": "^25.1.8",
     "html-webpack-plugin": "^5.6.3",
+    "jsdom": "^28.0.0",
     "style-loader": "^4.0.0",
     "ts-loader": "^9.5.1",
     "typescript": "^5.7.3",
+    "vitest": "^4.0.18",
     "webpack": "^5.97.1",
     "webpack-cli": "^6.0.1",
     "webpack-dev-server": "^5.2.0"

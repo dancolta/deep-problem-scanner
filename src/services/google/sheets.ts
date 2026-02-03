@@ -5,7 +5,7 @@ import { SheetRow, ScanStatus } from '../../shared/types';
 const SHEET_HEADERS = [
   'Company', 'Website URL', 'Contact Name', 'Contact Email',
   'Scan Status', 'Screenshot URL', 'Diagnostics', 'Email Subject',
-  'Email Body', 'Email Status', 'Scheduled Time', 'Sent Time',
+  'Email Body', 'Email Status', 'Draft ID', 'Scheduled Time', 'Sent Time',
 ];
 
 const COLUMN_MAP: Record<keyof SheetRow, string> = {
@@ -19,12 +19,14 @@ const COLUMN_MAP: Record<keyof SheetRow, string> = {
   email_subject: 'H',
   email_body: 'I',
   email_status: 'J',
-  scheduled_time: 'K',
-  sent_time: 'L',
+  draft_id: 'K',
+  scheduled_time: 'L',
+  sent_time: 'M',
 };
 
-const SHEET_RANGE = 'Sheet1';
 const DATA_START_ROW = 2;
+// Sheet name cache per spreadsheet
+const sheetNameCache: Record<string, string> = {};
 
 function rowToArray(row: SheetRow): string[] {
   return [
@@ -38,6 +40,7 @@ function rowToArray(row: SheetRow): string[] {
     row.email_subject,
     row.email_body,
     row.email_status,
+    row.draft_id || '',
     row.scheduled_time || '',
     row.sent_time || '',
   ];
@@ -55,8 +58,9 @@ function arrayToRow(arr: string[]): SheetRow {
     email_subject: arr[7] || '',
     email_body: arr[8] || '',
     email_status: (arr[9] as SheetRow['email_status']) || 'draft',
-    scheduled_time: arr[10] || undefined,
-    sent_time: arr[11] || undefined,
+    draft_id: arr[10] || undefined,
+    scheduled_time: arr[11] || undefined,
+    sent_time: arr[12] || undefined,
   };
 }
 
@@ -71,11 +75,25 @@ export class SheetsService {
     this.sheets = google.sheets({ version: 'v4', auth: authClient });
   }
 
+  private async getSheetName(spreadsheetId: string): Promise<string> {
+    if (sheetNameCache[spreadsheetId]) return sheetNameCache[spreadsheetId];
+    const meta = await this.sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties.title',
+    });
+    const name = meta.data.sheets?.[0]?.properties?.title || 'Sheet1';
+    sheetNameCache[spreadsheetId] = name;
+    return name;
+  }
+
   async ensureHeaders(spreadsheetId: string): Promise<void> {
     try {
+      const sheetName = await this.getSheetName(spreadsheetId);
+      const lastCol = String.fromCharCode(64 + SHEET_HEADERS.length); // A=65, so 13 → 'M'
+      const headerRange = `'${sheetName}'!A1:${lastCol}1`;
       const res = await this.sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `${SHEET_RANGE}!A1:L1`,
+        range: headerRange,
       });
 
       const existing = res.data.values?.[0];
@@ -87,7 +105,7 @@ export class SheetsService {
       if (!headersMatch) {
         await this.sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: `${SHEET_RANGE}!A1:L1`,
+          range: headerRange,
           valueInputOption: 'RAW',
           requestBody: { values: [SHEET_HEADERS] },
         });
@@ -102,10 +120,11 @@ export class SheetsService {
     if (rows.length === 0) return;
 
     try {
+      const sheetName = await this.getSheetName(spreadsheetId);
       const rowArrays = rows.map(rowToArray);
       await this.sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: `${SHEET_RANGE}!A:L`,
+        range: `'${sheetName}'!A:M`,
         valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: rowArrays },
@@ -118,9 +137,10 @@ export class SheetsService {
 
   async readRows(spreadsheetId: string): Promise<SheetRow[]> {
     try {
+      const sheetName = await this.getSheetName(spreadsheetId);
       const res = await this.sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `${SHEET_RANGE}!A${DATA_START_ROW}:L`,
+        range: `'${sheetName}'!A${DATA_START_ROW}:L`,
       });
 
       const values = res.data.values;
@@ -137,9 +157,10 @@ export class SheetsService {
 
   async checkDuplicates(spreadsheetId: string, websiteUrls: string[]): Promise<string[]> {
     try {
+      const sheetName = await this.getSheetName(spreadsheetId);
       const res = await this.sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `${SHEET_RANGE}!B${DATA_START_ROW}:B`,
+        range: `'${sheetName}'!B${DATA_START_ROW}:B`,
       });
 
       const existingRaw = res.data.values;
@@ -166,6 +187,7 @@ export class SheetsService {
     const sheetRow = rowIndex + DATA_START_ROW;
 
     try {
+      const sheetName = await this.getSheetName(spreadsheetId);
       const updatePromises = Object.entries(updates).map(([field, value]) => {
         const column = COLUMN_MAP[field as keyof SheetRow];
         if (!column) {
@@ -175,7 +197,7 @@ export class SheetsService {
 
         return this.sheets.spreadsheets.values.update({
           spreadsheetId,
-          range: `${SHEET_RANGE}!${column}${sheetRow}`,
+          range: `'${sheetName}'!${column}${sheetRow}`,
           valueInputOption: 'USER_ENTERED',
           requestBody: { values: [[value ?? '']] },
         });

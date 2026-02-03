@@ -248,12 +248,13 @@ export class GoogleAuthService {
     });
   }
 
-  private async openBrowser(url: string): Promise<void> {
+  private async openBrowser(targetUrl: string): Promise<void> {
     // Try Electron shell first
     try {
-      const { shell } = require('electron');
+      const electron = require('electron');
+      const shell = electron.shell || (electron.default && electron.default.shell);
       if (shell && typeof shell.openExternal === 'function') {
-        await shell.openExternal(url);
+        await shell.openExternal(targetUrl);
         return;
       }
     } catch {
@@ -261,7 +262,7 @@ export class GoogleAuthService {
     }
 
     // Fallback: platform-specific command
-    const command = this.getOpenCommand(url);
+    const command = this.getOpenCommand(targetUrl);
     return new Promise((resolve, reject) => {
       exec(command, (err) => {
         if (err) reject(err);

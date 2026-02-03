@@ -1,50 +1,13 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import type { ScanProgress, ScanResult } from '../../shared/types';
+import { useScan } from '../context/ScanContext';
+import type { ScanResult } from '../../shared/types';
 import './ScanPage.css';
 
 export default function ScanPage() {
   const navigate = useNavigate();
-  const [progress, setProgress] = useState<ScanProgress>({
-    total: 0,
-    completed: 0,
-    failed: 0,
-    currentUrl: '',
-    results: [],
-  });
-  const [isScanning, setIsScanning] = useState(true);
-  const [elapsedTime, setElapsedTime] = useState(0);
+  const { progress, isScanning, elapsedTime, cancelScan } = useScan();
   const feedRef = useRef<HTMLDivElement>(null);
-  const startTimeRef = useRef(Date.now());
-
-  // Elapsed time counter
-  useEffect(() => {
-    if (!isScanning) return;
-    const interval = setInterval(() => {
-      setElapsedTime(Math.floor((Date.now() - startTimeRef.current) / 1000));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isScanning]);
-
-  // IPC listeners
-  const handleProgress = useCallback((_event: unknown, data: unknown) => {
-    const p = data as ScanProgress;
-    setProgress(p);
-  }, []);
-
-  const handleComplete = useCallback((_event: unknown, _data: unknown) => {
-    setIsScanning(false);
-  }, []);
-
-  useEffect(() => {
-    const unsubProgress = window.electronAPI.on(IPC_CHANNELS.SCAN_PROGRESS, handleProgress);
-    const unsubComplete = window.electronAPI.on(IPC_CHANNELS.SCAN_COMPLETE, handleComplete);
-    return () => {
-      unsubProgress();
-      unsubComplete();
-    };
-  }, [handleProgress, handleComplete]);
 
   // Auto-scroll to latest result
   useEffect(() => {
@@ -53,15 +16,29 @@ export default function ScanPage() {
     }
   }, [progress.results.length]);
 
-  const handleCancel = async () => {
-    await window.electronAPI.invoke(IPC_CHANNELS.SCAN_CANCEL);
-    setIsScanning(false);
-  };
-
   const remaining = progress.total - progress.completed - progress.failed;
   const pct = progress.total > 0 ? Math.round(((progress.completed + progress.failed) / progress.total) * 100) : 0;
   const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
   const seconds = String(elapsedTime % 60).padStart(2, '0');
+
+  // Nothing has been started yet
+  if (!isScanning && progress.total === 0) {
+    return (
+      <div className="scan-page">
+        <div className="scan-header">
+          <h2>No Scan Running</h2>
+          <p style={{ color: '#888', marginTop: '1rem' }}>
+            Upload a CSV and start a scan from the Upload page.
+          </p>
+          <div className="control-bar">
+            <button className="btn-drafts" onClick={() => navigate('/upload')}>
+              Go to Upload
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="scan-page">
@@ -117,7 +94,7 @@ export default function ScanPage() {
       {/* Control Bar */}
       <div className="control-bar">
         {isScanning ? (
-          <button className="btn-cancel" onClick={handleCancel}>
+          <button className="btn-cancel" onClick={cancelScan}>
             Cancel Scan
           </button>
         ) : (

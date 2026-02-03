@@ -21,16 +21,23 @@ export class EmailScheduler {
     this.onEvent = onEvent;
   }
 
-  start(): void {
+  start(sendFn: (draft: EmailDraft) => Promise<{ draftId: string; messageId: string }>): void {
     this.running = true;
     this.timer = setInterval(() => {
-      // Tick — external code should call processNext with a sendFn
+      if (!this.running) return;
+      const hour = new Date().getHours();
+      const startH = this.config.startHour ?? 9;
+      const endH = this.config.endHour ?? 17;
+      if (hour < startH || hour >= endH) {
+        return; // Outside send window
+      }
+      this.processNext(sendFn);
     }, this.config.intervalMinutes * 60_000);
 
     this.emit({
       type: 'started',
       timestamp: new Date().toISOString(),
-      detail: `Scheduler started with ${this.config.intervalMinutes}min interval`,
+      detail: `Scheduler started with ${this.config.intervalMinutes}min interval (send window ${this.config.startHour ?? 9}:00–${this.config.endHour ?? 17}:00)`,
     });
   }
 
@@ -48,8 +55,8 @@ export class EmailScheduler {
     });
   }
 
-  addToQueue(drafts: EmailDraft[]): void {
-    const now = Date.now();
+  addToQueue(drafts: EmailDraft[], startTime?: number): void {
+    const now = startTime ?? Date.now();
     const intervalMs = this.config.intervalMinutes * 60_000;
     const existingPendingCount = this.queue.filter(
       (e) => e.status === 'pending',
