@@ -407,16 +407,26 @@ export async function drawAnnotations(
 
   // Process annotations sequentially to track placements
   const toProcess = annotations.slice(0, 3); // Max 3 annotations
+  let badgeNumber = 0; // Track actual badge number (only increment on success)
+
   for (let i = 0; i < toProcess.length; i++) {
     const ann = toProcess[i];
-    console.log(`[drawing] Annotation ${i+1}: "${ann.label}" at (${ann.x}, ${ann.y}) ${ann.width}x${ann.height}`);
 
-    const result = buildAnnotationSvg(ann, i, imgWidth, imgHeight, placedCards);
+    // Skip if no label
+    if (!ann.label || ann.label.length === 0) {
+      console.log(`[drawing] Skipping annotation ${i} - no label`);
+      continue;
+    }
+
+    console.log(`[drawing] Annotation ${badgeNumber+1}: "${ann.label}" at (${ann.x}, ${ann.y}) ${ann.width}x${ann.height}`);
+
+    const result = buildAnnotationSvg(ann, badgeNumber, imgWidth, imgHeight, placedCards);
 
     if (result.svg && result.placement) {
       svgParts.push(result.svg);
       placedCards.push(result.placement);
-      console.log(`[drawing] Placed card ${i+1} at (${result.placement.x}, ${result.placement.y})`);
+      console.log(`[drawing] Placed card ${badgeNumber+1} at (${result.placement.x}, ${result.placement.y})`);
+      badgeNumber++; // Only increment when card is successfully placed
     }
   }
 

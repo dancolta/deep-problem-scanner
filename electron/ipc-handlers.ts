@@ -279,9 +279,9 @@ export function registerAllHandlers(): void {
 
             console.log(`[IPC] Converted ${selectedIssues.length} Gemini issues to annotations`);
 
-            // RULE: MINIMUM 2 annotations required - if less than 2, skip this lead
-            if (selectedIssues.length < 2) {
-              console.log(`[IPC] Only ${selectedIssues.length} issue(s) found for ${lead.website_url} - SKIPPING (minimum 2 required)`);
+            // RULE: MINIMUM 1 annotation required - if 0 issues, skip this lead
+            if (selectedIssues.length < 1) {
+              console.log(`[IPC] No issues found for ${lead.website_url} - SKIPPING`);
 
               // Close the page session
               await scanner.closePageSession(session);
@@ -297,7 +297,7 @@ export function registerAllHandlers(): void {
                   contact_email: lead.contact_email,
                   scan_status: 'NO_ISSUES',
                   screenshot_url: 'No critical issues found - well optimized page',
-                  diagnostics_summary: `Found ${selectedIssues.length} issue(s) - minimum 2 required for outreach`,
+                  diagnostics_summary: `No conversion issues found - well optimized page`,
                   email_subject: '',
                   email_body: '',
                   email_status: 'skip' as const,
