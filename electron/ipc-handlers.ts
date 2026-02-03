@@ -208,16 +208,76 @@ export function registerAllHandlers(): void {
               continue;
             }
 
-            // 2. FULL PAGE SCAN - Check ALL potential issues with DOM verification
-            console.time(`[IPC] fullscan-${i}`);
-            const fullScan = await scanner.fullPageScan(session.page);
-            console.timeEnd(`[IPC] fullscan-${i}`);
+            // 2. GEMINI AI ANALYSIS - Analyze screenshot for conversion issues
+            console.time(`[IPC] gemini-${i}`);
+            const geminiAnalysis = await analyzePageSections(
+              session.viewportScreenshot,
+              session.diagnostics,
+              lead.website_url
+            );
+            console.timeEnd(`[IPC] gemini-${i}`);
 
-            console.log(`[IPC] Full scan found ${fullScan.issues.length} verified issues`);
-            console.log(`[IPC] Verified data:`, JSON.stringify(fullScan.verifiedData, null, 2));
+            console.log(`[IPC] Gemini found ${geminiAnalysis.sections.length} issues:`,
+              geminiAnalysis.sections.map(s => s.issue?.label));
 
-            // 3. Select 2-3 issues - MINIMUM 2 REQUIRED
-            let selectedIssues = fullScan.issues.slice(0, 3);
+            // 3. Convert Gemini issues to annotation format with element positions
+            const viewportSize = session.page.viewportSize();
+            const viewportHeight = viewportSize?.height || 1080;
+            const viewportWidth = viewportSize?.width || 1920;
+
+            const selectedIssues: VerifiedIssue[] = [];
+
+            for (const section of geminiAnalysis.sections.slice(0, 3)) {
+              if (!section.issue) continue;
+
+              // Try to find the element using Gemini's selector
+              let elementBounds = { x: viewportWidth * 0.2, y: viewportHeight * 0.3, width: 300, height: 80 };
+              let yPosition = viewportHeight * 0.3;
+
+              // Build selector list: Gemini's selector + fallbacks
+              const selectors = [
+                section.issue.elementSelector,
+                section.sectionSelector,
+                ...SECTION_FALLBACKS[section.section] || [],
+                getElementFallbackSelector(section.issue.label),
+              ].filter(Boolean);
+
+              // Try each selector to find element bounds
+              for (const selector of selectors) {
+                try {
+                  const el = await session.page.$(selector as string);
+                  if (el) {
+                    const bounds = await el.boundingBox();
+                    if (bounds && bounds.width > 20 && bounds.height > 10) {
+                      elementBounds = {
+                        x: Math.round(bounds.x),
+                        y: Math.round(bounds.y),
+                        width: Math.round(bounds.width),
+                        height: Math.round(bounds.height),
+                      };
+                      yPosition = bounds.y;
+                      console.log(`[IPC] Found element for "${section.issue.label}" using "${selector}" at (${elementBounds.x}, ${elementBounds.y})`);
+                      break;
+                    }
+                  }
+                } catch {
+                  // Try next selector
+                }
+              }
+
+              selectedIssues.push({
+                type: section.section as any,
+                label: section.issue.label,
+                description: section.issue.description || '',
+                severity: section.issue.severity === 'critical' ? 'critical' : 'warning',
+                conversionImpact: section.issue.conversionImpact,
+                yPosition,
+                elementBounds,
+                verified: true,
+              });
+            }
+
+            console.log(`[IPC] Converted ${selectedIssues.length} Gemini issues to annotations`);
 
             // RULE: MINIMUM 2 annotations required - if less than 2, skip this lead
             if (selectedIssues.length < 2) {
@@ -248,7 +308,6 @@ export function registerAllHandlers(): void {
             }
 
             // 4. Find best viewport position (where most issues cluster)
-            const viewportHeight = fullScan.viewportHeight;
             const issueYPositions = selectedIssues.map(issue => issue.yPosition);
 
             // Find scroll position that captures most issues
