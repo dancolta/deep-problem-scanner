@@ -20,8 +20,8 @@ module.exports = {
   },
   extraResources: [
     {
-      from: "node_modules/puppeteer/.local-chromium",
-      to: "chromium",
+      from: "node_modules/playwright/.local-browsers",
+      to: "browsers",
       filter: ["**/*"]
     }
   ]

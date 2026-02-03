@@ -279,14 +279,14 @@ export function registerAllHandlers(): void {
 
             console.log(`[IPC] Converted ${selectedIssues.length} Gemini issues to annotations`);
 
-            // RULE: MINIMUM 1 annotation required - if 0 issues, skip this lead
-            if (selectedIssues.length < 1) {
-              console.log(`[IPC] No issues found for ${lead.website_url} - SKIPPING`);
+            // Zero issues is VALID - well-optimized pages may have no issues
+            if (selectedIssues.length === 0) {
+              console.log(`[IPC] Zero issues found for ${lead.website_url} - page appears well-optimized`);
 
               // Close the page session
               await scanner.closePageSession(session);
 
-              // No screenshot, no email - just mark as "no issues"
+              // Mark as success with 0 issues (valid outcome for optimized pages)
               results.push({
                 lead,
                 scanStatus: 'SUCCESS',
@@ -296,81 +296,74 @@ export function registerAllHandlers(): void {
                   contact_name: lead.contact_name,
                   contact_email: lead.contact_email,
                   scan_status: 'NO_ISSUES',
-                  screenshot_url: 'No critical issues found - well optimized page',
-                  diagnostics_summary: `No conversion issues found - well optimized page`,
+                  screenshot_url: 'No conversion issues detected',
+                  diagnostics_summary: 'Page appears well-optimized - no actionable issues found',
                   email_subject: '',
                   email_body: '',
                   email_status: 'skip' as const,
                 },
-                issueCount: selectedIssues.length,
+                issueCount: 0,
               });
               continue;
             }
 
-            // 4. Find best viewport position (where most issues cluster)
-            const issueYPositions = selectedIssues.map(issue => issue.yPosition);
+            // 4. ALWAYS capture at top of page (scroll position 0)
+            // This ensures hero section with trust signals is always visible
+            const bestScrollY = 0;
 
-            // Find scroll position that captures most issues
-            let bestScrollY = 0;
-            let maxIssuesInView = 0;
-
-            for (const issue of selectedIssues) {
-              // Try scrolling so this issue is in upper third of viewport
-              const testScrollY = Math.max(0, issue.yPosition - viewportHeight * 0.3);
-
-              // Count how many issues would be visible at this scroll position
-              const issuesInView = selectedIssues.filter(i => {
-                const relativeY = i.yPosition - testScrollY;
-                return relativeY >= 0 && relativeY < viewportHeight;
-              }).length;
-
-              if (issuesInView > maxIssuesInView) {
-                maxIssuesInView = issuesInView;
-                bestScrollY = testScrollY;
-              }
-            }
-
-            console.log(`[IPC] Best scroll position: ${bestScrollY}px (${maxIssuesInView} issues in view)`);
+            console.log(`[IPC] Capturing at top of page (scroll: 0), ${selectedIssues.length} issues to annotate`);
 
             // 5. Capture screenshot at optimal position
             const screenshotBuffer = await scanner.captureAtPosition(session.page, bestScrollY);
 
-            // 6. Build annotations with positions relative to viewport
+            // 6. Build annotations - cards are placed on right side, so include ALL issues
             const annotations: AnnotationCoord[] = [];
             const annotationLabels: string[] = [];
 
             for (const issue of selectedIssues) {
-              // Calculate position relative to current viewport
-              const relativeY = issue.yPosition - bestScrollY;
-
-              // Only include if visible in viewport
-              if (relativeY >= -50 && relativeY < viewportHeight + 50) {
-                const bounds = issue.elementBounds;
-                annotations.push({
-                  x: bounds.x,
-                  y: Math.max(0, bounds.y - bestScrollY), // Adjust Y for scroll
-                  width: bounds.width,
-                  height: bounds.height,
-                  label: issue.label,
-                  severity: issue.severity,
-                  description: issue.description,
-                  conversionImpact: issue.conversionImpact,
-                });
-                annotationLabels.push(issue.label);
-                console.log(`[IPC] Adding annotation: "${issue.label}" at relative Y=${relativeY}`);
-              }
+              const bounds = issue.elementBounds;
+              annotations.push({
+                x: bounds.x,
+                y: bounds.y,
+                width: bounds.width,
+                height: bounds.height,
+                label: issue.label,
+                severity: issue.severity,
+                description: issue.description,
+                conversionImpact: issue.conversionImpact,
+              });
+              annotationLabels.push(issue.label);
+              console.log(`[IPC] Adding annotation: "${issue.label}"`);
             }
 
             // 7. Draw ALL annotations on the screenshot
-            let finalScreenshot: Buffer;
-            if (annotations.length > 0) {
-              console.log(`[IPC] Drawing ${annotations.length} verified annotations`);
-              const annotatedBuffer = await drawAnnotations(screenshotBuffer, annotations);
-              finalScreenshot = await compressForEmail(annotatedBuffer, 400, 1200);
-            } else {
-              console.error(`[IPC] WARNING: No annotations visible in viewport for ${lead.website_url}`);
-              finalScreenshot = await compressForEmail(screenshotBuffer, 400, 1200);
+            // CRITICAL: Never proceed with unannotated screenshots
+            if (annotations.length === 0) {
+              console.log(`[IPC] No annotations could be positioned for ${lead.website_url} - SKIPPING`);
+              await scanner.closePageSession(session);
+              results.push({
+                lead,
+                scanStatus: 'SUCCESS',
+                sheetRow: {
+                  company_name: lead.company_name,
+                  website_url: lead.website_url,
+                  contact_name: lead.contact_name,
+                  contact_email: lead.contact_email,
+                  scan_status: 'NO_ANNOTATIONS',
+                  screenshot_url: 'Could not position annotations on page',
+                  diagnostics_summary: `Found ${selectedIssues.length} issue(s) but could not locate elements`,
+                  email_subject: '',
+                  email_body: '',
+                  email_status: 'skip' as const,
+                },
+                issueCount: 0,
+              });
+              continue;
             }
+
+            console.log(`[IPC] Drawing ${annotations.length} verified annotations`);
+            const annotatedBuffer = await drawAnnotations(screenshotBuffer, annotations);
+            const finalScreenshot = await compressForEmail(annotatedBuffer, 400, 1200);
 
             // Store as single screenshot with all annotations
             const sectionScreenshots = [{

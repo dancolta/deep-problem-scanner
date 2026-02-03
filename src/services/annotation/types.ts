@@ -9,6 +9,7 @@ export interface AnnotationCoord {
   severity: AnnotationSeverity;
   description: string;
   conversionImpact?: string; // Stat showing business impact (e.g., "Up to 50% bounce increase")
+  inventoryRef?: string; // Reference to visual inventory item for traceability
 }
 
 export interface AnnotationResult {

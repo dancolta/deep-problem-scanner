@@ -2,26 +2,26 @@ import sharp from 'sharp';
 import { AnnotationCoord, AnnotationSeverity } from './types';
 
 // ============================================================================
-// ANNOTATION RULES (v4) - CARDS ONLY, NO ARROWS
+// ANNOTATION RULES (v5) - RIGHT-SIDE STACKED CARDS
 // ============================================================================
 // WHAT WE DRAW:
 // 1. Callout card (white bg, gray border, red left accent)
 // 2. Numbered badge above card
 //
 // WHAT WE DO NOT DRAW:
-// - NO arrows (removed for cleaner look)
+// - NO arrows
 // - NO rectangles around target elements
 // - NO dashed boxes
 //
 // SCREENSHOT PROCESSING:
-// - Darken screenshot by 20% so white cards pop
+// - Darken screenshot by 35% so white cards pop
 // - Enhanced shadow on cards for visibility
 //
 // CARD RULES:
 // - FIXED MAX WIDTH (437px)
-// - Card NEVER overlaps target element (25px minimum gap)
+// - ALL cards on RIGHT SIDE of screenshot
+// - Cards stacked vertically, centered in the middle of the screen
 // - Badge positioned ABOVE card
-// - Cards positioned NEAR target element
 // ============================================================================
 
 const ANNOTATION_COLOR = '#dc2626'; // Red for all annotations
@@ -131,18 +131,6 @@ function buildAnnotationSvg(
   const clamped = clampAnnotation(ann, imgWidth, imgHeight);
   const parts: string[] = [];
 
-  // TARGET ELEMENT bounds (the element with the issue)
-  const targetRect = {
-    x: clamped.x,
-    y: clamped.y,
-    w: clamped.width,
-    h: clamped.height,
-  };
-
-  // TARGET POINT - exact center of the element with issue
-  const targetCenterX = clamped.x + clamped.width / 2;
-  const targetCenterY = clamped.y + clamped.height / 2;
-
   const label = clamped.label || '';
   const rawImpact = clamped.conversionImpact || '';
 
@@ -166,147 +154,38 @@ function buildAnnotationSvg(
     boxHeight += impactLines.length * (LINE_HEIGHT - 4);
   }
 
-  // ========== POSITION CARD - STRICT RULES ==========
-  // RULE 1: Card must NEVER overlap the target element (minimum 25px gap)
-  // RULE 2: Card must not overlap other placed cards (20px gap)
-  // RULE 3: Arrow length should be 50-150px (ideal 80-120px)
-
+  // ========== POSITION CARD - RIGHT SIDE, VERTICALLY STACKED ==========
   const edgeMargin = 25;
-  const TARGET_GAP = 25; // Minimum gap between card and target element
+  const cardGap = 20; // Gap between stacked cards
+  const badgeSpace = BADGE_RADIUS + 10; // Space for badge above first card
 
-  // Helper to check if candidate overlaps any placed card
-  const overlapsPlacedCards = (cardRect: { x: number; y: number; w: number; h: number }): boolean => {
-    for (const placed of placedCards) {
-      if (rectsOverlap(cardRect, placed, 20)) {
-        return true;
-      }
-    }
-    return false;
-  };
+  // X position: right side of screen
+  const boxX = imgWidth - boxWidth - edgeMargin;
 
-  // Helper to check if card overlaps target (STRICT - must not touch)
-  const overlapsTarget = (cardRect: { x: number; y: number; w: number; h: number }): boolean => {
-    return rectsOverlap(cardRect, targetRect, TARGET_GAP);
-  };
-
-  type CandidatePosition = {
-    x: number;
-    y: number;
-    arrowLength: number;
-    direction: 'right' | 'left' | 'above' | 'below';
-  };
-
-  const candidates: CandidatePosition[] = [];
-  const gapsToTry = [40, 60, 80, 100, 120];
-
-  for (const gap of gapsToTry) {
-    // RIGHT of target
-    const rightX = targetRect.x + targetRect.w + gap;
-    const rightY = Math.max(edgeMargin + BADGE_RADIUS + 15, Math.min(targetCenterY - boxHeight / 2, imgHeight - boxHeight - edgeMargin));
-    const rightCardRect = { x: rightX, y: rightY, w: boxWidth, h: boxHeight };
-    if (rightX + boxWidth < imgWidth - edgeMargin && !overlapsTarget(rightCardRect) && !overlapsPlacedCards(rightCardRect)) {
-      const arrowLen = distance(rightX, rightY + boxHeight / 2, targetCenterX, targetCenterY);
-      if (arrowLen >= ARROW_MIN_LENGTH && arrowLen <= ARROW_MAX_LENGTH) {
-        candidates.push({ x: rightX, y: rightY, arrowLength: arrowLen, direction: 'right' });
-      }
-    }
-
-    // LEFT of target
-    const leftX = targetRect.x - boxWidth - gap;
-    const leftY = Math.max(edgeMargin + BADGE_RADIUS + 15, Math.min(targetCenterY - boxHeight / 2, imgHeight - boxHeight - edgeMargin));
-    const leftCardRect = { x: leftX, y: leftY, w: boxWidth, h: boxHeight };
-    if (leftX > edgeMargin && !overlapsTarget(leftCardRect) && !overlapsPlacedCards(leftCardRect)) {
-      const arrowLen = distance(leftX + boxWidth, leftY + boxHeight / 2, targetCenterX, targetCenterY);
-      if (arrowLen >= ARROW_MIN_LENGTH && arrowLen <= ARROW_MAX_LENGTH) {
-        candidates.push({ x: leftX, y: leftY, arrowLength: arrowLen, direction: 'left' });
-      }
-    }
-
-    // BELOW target
-    const belowX = Math.max(edgeMargin, Math.min(targetCenterX - boxWidth / 2, imgWidth - boxWidth - edgeMargin));
-    const belowY = targetRect.y + targetRect.h + gap;
-    const belowCardRect = { x: belowX, y: belowY, w: boxWidth, h: boxHeight };
-    if (belowY + boxHeight < imgHeight - edgeMargin && !overlapsTarget(belowCardRect) && !overlapsPlacedCards(belowCardRect)) {
-      const arrowLen = distance(belowX + boxWidth / 2, belowY, targetCenterX, targetCenterY);
-      if (arrowLen >= ARROW_MIN_LENGTH && arrowLen <= ARROW_MAX_LENGTH) {
-        candidates.push({ x: belowX, y: belowY, arrowLength: arrowLen, direction: 'below' });
-      }
-    }
-
-    // ABOVE target (need space for badge)
-    const aboveX = Math.max(edgeMargin, Math.min(targetCenterX - boxWidth / 2, imgWidth - boxWidth - edgeMargin));
-    const aboveY = targetRect.y - boxHeight - gap - BADGE_RADIUS - 10;
-    const aboveCardRect = { x: aboveX, y: aboveY, w: boxWidth, h: boxHeight };
-    if (aboveY > edgeMargin + BADGE_RADIUS + 10 && !overlapsTarget(aboveCardRect) && !overlapsPlacedCards(aboveCardRect)) {
-      const arrowLen = distance(aboveX + boxWidth / 2, aboveY + boxHeight, targetCenterX, targetCenterY);
-      if (arrowLen >= ARROW_MIN_LENGTH && arrowLen <= ARROW_MAX_LENGTH) {
-        candidates.push({ x: aboveX, y: aboveY, arrowLength: arrowLen, direction: 'above' });
-      }
-    }
-  }
-
-  // Sort by arrow length closest to ideal
-  candidates.sort((a, b) => {
-    const aDistFromIdeal = Math.abs(a.arrowLength - ARROW_IDEAL_LENGTH);
-    const bDistFromIdeal = Math.abs(b.arrowLength - ARROW_IDEAL_LENGTH);
-    return aDistFromIdeal - bDistFromIdeal;
-  });
-
-  let boxX: number;
+  // Y position: calculate based on previously placed cards
   let boxY: number;
-  let chosenDirection: 'right' | 'left' | 'above' | 'below' = 'right';
 
-  if (candidates.length > 0) {
-    const best = candidates[0];
-    boxX = best.x;
-    boxY = best.y;
-    chosenDirection = best.direction;
-    console.log(`[drawing] Best position: ${best.direction}, arrow: ${Math.round(best.arrowLength)}px`);
+  if (placedCards.length === 0) {
+    // First card: calculate to vertically center all cards
+    // Estimate total height of all cards (assume max 3 cards, similar heights)
+    const estimatedTotalHeight = boxHeight * 3 + cardGap * 2 + badgeSpace;
+    const startY = Math.max(
+      edgeMargin + badgeSpace,
+      (imgHeight - estimatedTotalHeight) / 2 + badgeSpace
+    );
+    boxY = startY;
   } else {
-    // STRICT FALLBACK: Find ANY position that doesn't overlap target
-    console.log(`[drawing] No ideal position, finding safe fallback...`);
+    // Stack below the last placed card
+    const lastCard = placedCards[placedCards.length - 1];
+    boxY = lastCard.y + lastCard.h + cardGap + badgeSpace;
 
-    // Try right side with larger gap
-    boxX = targetRect.x + targetRect.w + 50;
-    boxY = Math.max(edgeMargin + BADGE_RADIUS + 15, targetCenterY - boxHeight / 2);
-    chosenDirection = 'right';
-
-    // If right side would go off screen, try left
-    if (boxX + boxWidth > imgWidth - edgeMargin) {
-      boxX = targetRect.x - boxWidth - 50;
-      chosenDirection = 'left';
-    }
-
-    // If left would go off screen, try below
-    if (boxX < edgeMargin) {
-      boxX = Math.max(edgeMargin, targetCenterX - boxWidth / 2);
-      boxY = targetRect.y + targetRect.h + 50;
-      chosenDirection = 'below';
-    }
-
-    // Clamp to screen bounds
-    boxX = Math.max(edgeMargin, Math.min(boxX, imgWidth - boxWidth - edgeMargin));
-    boxY = Math.max(edgeMargin + BADGE_RADIUS + 15, Math.min(boxY, imgHeight - boxHeight - edgeMargin));
-
-    // FINAL CHECK: If still overlapping target, push away
-    const finalCardRect = { x: boxX, y: boxY, w: boxWidth, h: boxHeight };
-    if (overlapsTarget(finalCardRect)) {
-      console.log(`[drawing] Fallback still overlaps, pushing away from target...`);
-      // Push card away from target based on direction
-      if (chosenDirection === 'right') {
-        boxX = targetRect.x + targetRect.w + TARGET_GAP + 10;
-      } else if (chosenDirection === 'left') {
-        boxX = targetRect.x - boxWidth - TARGET_GAP - 10;
-      } else if (chosenDirection === 'below') {
-        boxY = targetRect.y + targetRect.h + TARGET_GAP + 10;
-      } else {
-        boxY = targetRect.y - boxHeight - TARGET_GAP - BADGE_RADIUS - 10;
-      }
-      // Final clamp
-      boxX = Math.max(edgeMargin, Math.min(boxX, imgWidth - boxWidth - edgeMargin));
-      boxY = Math.max(edgeMargin + BADGE_RADIUS + 15, Math.min(boxY, imgHeight - boxHeight - edgeMargin));
+    // If we'd go off screen, reset to top
+    if (boxY + boxHeight > imgHeight - edgeMargin) {
+      boxY = edgeMargin + badgeSpace;
     }
   }
+
+  console.log(`[drawing] Card ${index + 1} positioned at right side: (${boxX}, ${boxY})`);
 
   // ========== 1. DRAW CARD ==========
   parts.push(
@@ -390,15 +269,15 @@ export async function drawAnnotations(
 
   console.log(`[drawing] Image dimensions: ${imgWidth}x${imgHeight}, annotations: ${annotations.length}`);
 
-  // ========== STEP 1: DARKEN THE SCREENSHOT BY 20% ==========
+  // ========== STEP 1: DARKEN THE SCREENSHOT BY 35% ==========
   // This makes the white cards pop more visibly
   const darkenedBuffer = await sharp(realBuf)
     .modulate({
-      brightness: 0.8, // 80% brightness = 20% darker
+      brightness: 0.65, // 65% brightness = 35% darker
     })
     .toBuffer();
 
-  console.log(`[drawing] Screenshot darkened by 20%`);
+  console.log(`[drawing] Screenshot darkened by 35%`);
 
   // ========== STEP 2: BUILD ANNOTATION CARDS ==========
   // Track placed cards to avoid overlaps

@@ -8,21 +8,51 @@ import {
   DEFAULT_ANNOTATION_OPTIONS,
 } from './types';
 
+// Visual inventory of what Gemini actually sees
+export interface VisualInventory {
+  buttons: Array<{ exactText: string; style: string; colorScheme: string }>;
+  headlines: { h1: string | null; subheadline: string | null };
+  trustSignals: {
+    companyLogos: string[];
+    customerCount: string | null;
+    hasTestimonials: boolean;
+    badges: string[];
+  };
+  heroImage: {
+    type: string;
+    description: string;
+    appearsGenericStock: boolean;
+  } | null;
+}
+
+// Issue that must reference the inventory
+export interface GroundedIssue {
+  inventoryRef: string; // MUST quote from inventory
+  section: string;
+  label: string;
+  description: string;
+  severity: string;
+  conversionImpact: string;
+  elementSelector: string;
+}
+
 export interface SectionIssue {
   section: 'hero' | 'cta' | 'trust' | 'pricing' | 'testimonials' | 'footer' | 'navigation';
-  sectionSelector: string; // CSS selector to capture this section
+  sectionSelector: string;
   issue: {
     label: string;
     description: string;
     conversionImpact: string;
     severity: AnnotationSeverity;
-    elementSelector: string; // CSS selector for the specific problematic element within section
+    elementSelector: string;
+    inventoryRef?: string;
   };
 }
 
 export interface AnalysisResult {
   sections: SectionIssue[];
   rawAnalysis: string;
+  inventory?: VisualInventory;
 }
 
 function buildAnalysisPrompt(
@@ -35,257 +65,264 @@ function buildAnalysisPrompt(
 
   return `You are analyzing the HERO SECTION (above-the-fold) of ${url}.
 
-Find 1-3 issues that hurt conversions. Be practical - most websites have at least one issue worth fixing.
+This is a TWO-PHASE analysis. You MUST complete Phase 1 before Phase 2.
 
 ## DIAGNOSTIC DATA
 ${diagnosticLines}
 
-## WHAT TO SCAN FOR
+---
 
-### Category 1: CTA Problems (Check First)
+## PHASE 1: VISUAL INVENTORY (Required First)
 
-**Missing/Weak Primary CTA**
-- ✅ FLAG if:
-  - No button at all in hero
-  - Button text is vague: "Learn More", "Click Here", "Submit", "Get Started" (without context)
-  - Multiple buttons competing (3+ CTAs with equal visual weight)
-  - CTA is ghost/outline style that blends into background
-- Impact: "84% less engagement without clear CTA"
+Before analyzing anything, you MUST inventory exactly what you see. Be precise and literal.
 
-**Example Good Flag**:
-- Button says "Learn More" → Too generic, doesn't tell visitor what happens next
-- No button visible → Visitor doesn't know what action to take
+### 1A. BUTTONS
+List every button/CTA visible in the hero section:
+- Write the EXACT text on each button (copy it exactly)
+- Describe the style (solid/outline/ghost)
+- Describe the color scheme (e.g., "blue solid", "white outline on dark")
 
-### Category 2: Unclear Value Proposition
+If no buttons are visible, write: "none visible"
 
-**Generic or Confusing Headline**
-- ✅ FLAG if:
-  - Headline is pure fluff: "Welcome", "Your Partner in Success", "Solutions That Work"
-  - After reading headline + subheadline, you STILL don't know what they sell/do
-  - Headline is cutoff or hidden by overlay
-- Impact: "Up to 50% bounce rate increase"
+### 1B. HEADLINES
+- H1 (main headline): Copy the exact text, or "none visible"
+- Subheadline: Copy the exact text, or "none visible"
 
-**Example Good Flag**:
-- "Innovation Made Simple" → Visitor has no clue what product/service this is
-- "Welcome to TechCorp" → Tells you the company name but not what they do
+### 1C. TRUST SIGNALS
+Look carefully at the ENTIRE screenshot for ANY of these:
+- Company/client logos (list company names you can identify)
+- Customer count text (e.g., "Trusted by 10,000+ companies")
+- Testimonial quotes or review stars
+- Certification badges or awards
 
-### Category 3: Missing Trust Signals
+If you find ANY trust signal, list it. If none found, write: "none visible"
 
-**Zero Social Proof in Hero**
-- ✅ FLAG if:
-  - No client logos visible
-  - No testimonials, reviews, or ratings shown
-  - No trust badges ("As Seen In", certifications, awards)
-  - Large empty space where logos could/should be
-- Impact: "42% conversion lift when trust added"
-
-**Example Good Flag**:
-- Hero has headline, CTA, image... but zero indication anyone uses this product
-- Blank space under hero where "Trusted by X companies" should be
-
-### Category 4: Form Friction (If form is visible)
-
-**Intimidating Form**
-- ✅ FLAG if:
-  - Form shows 5+ fields at once
-  - Asks for phone number + company + role + budget without explanation
-  - No privacy message or security indicators
-- Impact: "10% drop per extra field"
-
-### Category 5: Poor Visual Hierarchy
-
-**Confusing Layout**
-- ✅ FLAG if:
-  - Can't tell what to look at first (everything same size/weight)
-  - Headline is smaller than body text
-  - CTA button is tiny and easy to miss
-  - Important text is cut off or overlapping
-- Impact: "35% better engagement with clear hierarchy"
-
-### Category 6: Generic Stock Imagery
-
-**Meaningless Hero Image**
-- ✅ FLAG if:
-  - Obvious stock photo (handshake, laptop, diverse meeting)
-  - Image could work for literally any business
-  - No product screenshot, demo, or service visualization
-- Impact: "27% higher engagement with relevant visuals"
+### 1D. HERO IMAGE
+- What type of image is shown? (product screenshot, photo, illustration, none)
+- Brief description of what it shows
+- Does it appear to be generic stock photography? (yes/no)
 
 ---
 
-## HOW TO EVALUATE
+## PHASE 2: GROUNDED ANALYSIS
 
-### Ask yourself:
-1. **Is this actually a problem?** (Yes = visitor confusion/friction, No = preference)
-2. **Would fixing this likely improve results?** (Yes = clearer action/value, No = minor polish)
-3. **Can I explain it in one sentence?** (Yes = clear issue, No = too vague)
+Now analyze ONLY based on what you inventoried above. Every issue MUST reference your inventory.
 
-### Flag it if 2/3 are "Yes"
+### CTA ANALYSIS
 
----
+**ONLY flag if ALL of these are true:**
+1. Your inventory shows a button exists
+2. The button text is EXACTLY one of: "Submit", "Click Here", "Go", "Continue", "Next", or "Learn More" (alone)
 
-## WHAT NOT TO FLAG
+**DO NOT flag if button text includes specifics like:**
+- "Get a Demo", "Start Free Trial", "Book a Call", "Get Started", "See Pricing", "Request Quote", "Shop Now", "Download Now", "Join Waitlist", "Try Free", "Sign Up Free"
 
-❌ **Stylistic preferences**:
-- "Blue would work better than green"
-- "This font isn't my favorite"
-- "Image could be higher resolution"
+**NEVER flag "missing CTA" if your inventory shows ANY button exists.**
 
-❌ **Minor optimization ideas**:
-- "Headline could be stronger" (if it's already clear what they do)
-- "CTA could be bigger" (if it's already visible)
-- "Could add one more logo" (if they already have some)
+### HEADLINE ANALYSIS
 
-❌ **Things that work fine**:
-- Standard top navigation (even if it has 6-7 items)
-- Common patterns (logo top-left, nav top-right)
-- Professional but simple design
+**ONLY flag if:**
+Your inventory shows the H1 and subheadline do NOT answer: "What product/service does this company sell?"
 
----
+Test: Can you complete "This company sells ___" after reading the headline + subheadline?
+- YES = DO NOT flag
+- NO = FLAG only if answer is truly unknowable
 
-## DECISION FLOWCHART
+### TRUST SIGNALS ANALYSIS
 
-Look at hero section - what stands out as broken or missing?
+**CRITICAL: Check your inventory from Phase 1C before flagging!**
 
-**Check CTA:**
-- Is there a button? → NO = FLAG IT
-- Is button text generic/vague? → YES = FLAG IT
-- Are 3+ buttons competing? → YES = FLAG IT
+**ONLY flag "Missing Trust Signals" if your inventory shows ALL of these are empty:**
+- companyLogos: []
+- customerCount: null
+- hasTestimonials: false
+- badges: []
 
-**Check Headline:**
-- Can you tell what they sell in 5 seconds? → NO = FLAG IT
-- Is it pure fluff with no substance? → YES = FLAG IT
-
-**Check Trust:**
-- Any logos/testimonials visible? → NO = FLAG IT
-- Large empty space where proof should be? → YES = FLAG IT
-
-**Check Form (if visible):**
-- 5+ fields showing? → YES = FLAG IT
-
-**Check Visuals:**
-- Generic stock photo that could be on any site? → YES = FLAG IT
-- Layout confusing or text overlapping? → YES = FLAG IT
-
-**Result:**
-- Found 1-3 issues? → RETURN THEM
-- Found 0 issues? → Return the LEAST optimized element with mild phrasing
-- Found 4+ issues? → Return the TOP 3 most impactful
+**NEVER flag if your inventory shows ANY trust signal exists.**
+- Even ONE company logo = DO NOT flag
+- Even ONE "Trusted by X" text = DO NOT flag
+- Even ONE testimonial visible = DO NOT flag
 
 ---
 
-## EXAMPLES - Real Scenarios
+## OUTPUT RULES
 
-### Example 1: SaaS Homepage
-**Hero has**: Logo, "Transform Your Workflow" headline, paragraph of text, "Learn More" button
-
-**FLAG**:
-1. Generic headline - doesn't say it's project management software (critical)
-2. Vague CTA - "Learn More" doesn't tell what happens next (warning)
-3. No client logos visible (warning)
-
-### Example 2: E-commerce Homepage
-**Hero has**: Product photo, "Shop Now" button, "Premium Quality Products" headline, client testimonial
-
-**FLAG**:
-1. Generic headline could be more specific about what products (warning)
-
-### Example 3: Consulting Site
-**Hero has**: Stock photo of business meeting, "Your Success Partner" headline, large contact form with 8 fields
-
-**FLAG**:
-1. Meaningless headline - "Your Success Partner" says nothing (critical)
-2. Form friction - 8 fields is intimidating (critical)
-3. Generic stock imagery - business meeting photo (warning)
-
----
-
-## CALIBRATION GUIDE
-
-**If you're finding 0 issues on most sites** → You're being too strict
-- Loosen up: "Learn More" IS a weak CTA even if button exists
-- Generic headlines DO hurt even if technically readable
-
-**If you're flagging 4+ issues per site** → You're being too picky
-- Tighten up: Return only the TOP 3 most impactful issues
-
-**Sweet spot**: 1-3 issues that the business owner will immediately recognize as worth fixing
+1. **Zero issues is VALID** - Well-optimized pages may have no issues
+2. **Maximum 3 issues** - Only flag clear violations
+3. **Every issue MUST include inventoryRef** - Quote the specific inventory item
 
 ---
 
 ## OUTPUT FORMAT
 
-Return ONLY valid JSON with 1-3 issues:
+Return ONLY valid JSON:
 
 {
+  "inventory": {
+    "buttons": [
+      { "exactText": "Get a Demo", "style": "solid", "colorScheme": "blue" }
+    ],
+    "headlines": {
+      "h1": "AI-Powered Analytics for Modern Teams",
+      "subheadline": "Track performance in real-time"
+    },
+    "trustSignals": {
+      "companyLogos": ["Google", "Microsoft", "Stripe"],
+      "customerCount": "Trusted by 5,000+ companies",
+      "hasTestimonials": false,
+      "badges": []
+    },
+    "heroImage": {
+      "type": "product screenshot",
+      "description": "Dashboard showing analytics charts",
+      "appearsGenericStock": false
+    }
+  },
   "sections": [
     {
       "section": "cta",
       "sectionSelector": ".hero, section:first-of-type",
       "issue": {
+        "inventoryRef": "Button text: 'Learn More'",
         "label": "Vague CTA - Learn More Doesn't Convert",
-        "description": "Button says 'Learn More' which doesn't tell visitors what happens when they click - request demo? see pricing? read blog?",
+        "description": "Button says 'Learn More' which doesn't tell visitors what happens next",
         "conversionImpact": "84% less engagement without clear CTA",
         "severity": "critical",
-        "elementSelector": "a.cta, button.primary, .hero a, .hero button"
-      }
-    },
-    {
-      "section": "hero",
-      "sectionSelector": "h1",
-      "issue": {
-        "label": "Generic Headline Lacks Value Proposition",
-        "description": "Headline says 'Transform Your Workflow' but doesn't explain what the product actually does",
-        "conversionImpact": "Up to 50% bounce rate increase",
-        "severity": "critical",
-        "elementSelector": "h1"
+        "elementSelector": ".hero button, .hero a.btn"
       }
     }
   ]
 }
 
-### Field Mapping:
-- **section**: "cta" | "hero" | "trust" | "form" | "visual"
-- **label**: Short 5-8 word title (what's wrong)
-- **description**: One sentence explaining the problem clearly
-- **conversionImpact**: Exact stat from above
-- **severity**: "critical" or "warning"
-- **elementSelector**: CSS selector for the problem element
+### SEVERITY MAPPING:
+- "critical" = HIGH priority (missing/vague CTA, unclear value prop)
+- "warning" = MEDIUM priority (missing trust, generic image)
+
+### CONVERSION IMPACT STATS (use exactly):
+- CTA issues: "84% less engagement without clear CTA"
+- Headline issues: "Up to 50% bounce rate increase"
+- Trust issues: "42% conversion lift when trust added"
 
 ---
 
-## REMEMBER
+## SELF-CHECK BEFORE RETURNING
 
-You're finding real problems that:
-1. A business owner will recognize immediately
-2. Are costing them conversions right now
-3. Can be shown clearly in an annotated screenshot
-4. Are worth discussing in a sales conversation
+For each issue, verify:
+1. Does inventoryRef quote something from my Phase 1 inventory?
+2. Would the issue be rejected if inventory shows the element exists?
+3. Am I CERTAIN this meets the exact flagging criteria?
 
-**Most websites have at least one issue.** Don't be so strict that you return nothing. Quality matters, but 1-3 real issues is the goal.`;
+If any answer is NO, remove that issue.
+
+**Remember: It's better to return 0 issues than to hallucinate issues that don't exist.**`;
 }
 
-function parseAnalysisResponse(text: string): SectionIssue[] {
+function validateIssueAgainstInventory(
+  issue: GroundedIssue,
+  inventory: VisualInventory
+): { valid: boolean; reason?: string } {
+  const labelLower = issue.label.toLowerCase();
+
+  // Reject CTA issues if a valid CTA exists in inventory
+  if (labelLower.includes('cta') || labelLower.includes('button')) {
+    const hasValidCTA = inventory.buttons.some(btn => {
+      const text = btn.exactText.toLowerCase();
+      // These are GOOD CTAs - should not be flagged
+      const goodCTAs = ['demo', 'trial', 'start', 'get', 'book', 'pricing', 'quote', 'shop', 'download', 'join', 'sign up', 'try'];
+      return goodCTAs.some(good => text.includes(good));
+    });
+
+    if (hasValidCTA && labelLower.includes('missing')) {
+      return { valid: false, reason: 'Inventory shows valid CTA button exists' };
+    }
+
+    // Check if flagging a "vague" CTA that isn't actually vague
+    if (labelLower.includes('vague') || labelLower.includes('unclear')) {
+      const vagueTexts = ['submit', 'click here', 'go', 'continue', 'next', 'learn more'];
+      const hasVagueCTA = inventory.buttons.some(btn =>
+        vagueTexts.includes(btn.exactText.toLowerCase().trim())
+      );
+      if (!hasVagueCTA) {
+        return { valid: false, reason: `Inventory shows specific CTA text, not vague: ${inventory.buttons.map(b => b.exactText).join(', ')}` };
+      }
+    }
+  }
+
+  // Reject trust issues if trust signals exist in inventory
+  if (labelLower.includes('trust')) {
+    const hasTrustSignals =
+      inventory.trustSignals.companyLogos.length > 0 ||
+      inventory.trustSignals.customerCount !== null ||
+      inventory.trustSignals.hasTestimonials ||
+      inventory.trustSignals.badges.length > 0;
+
+    if (hasTrustSignals) {
+      return {
+        valid: false,
+        reason: `Inventory shows trust signals exist: logos=[${inventory.trustSignals.companyLogos.join(', ')}], customerCount=${inventory.trustSignals.customerCount}, testimonials=${inventory.trustSignals.hasTestimonials}`
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+function parseAnalysisResponse(text: string): { sections: SectionIssue[]; inventory?: VisualInventory } {
   try {
     const parsed = JSON.parse(text);
-    if (parsed && Array.isArray(parsed.sections)) {
-      return parsed.sections.slice(0, 3); // Max 3 sections
+    if (parsed) {
+      const inventory = parsed.inventory as VisualInventory | undefined;
+      let sections = parsed.sections as SectionIssue[] | undefined;
+
+      if (inventory) {
+        console.log('[gemini-vision] Inventory:', JSON.stringify(inventory, null, 2));
+      }
+
+      if (Array.isArray(sections)) {
+        // Validate each issue against inventory
+        if (inventory) {
+          const validatedSections: SectionIssue[] = [];
+          for (const section of sections) {
+            if (!section.issue) continue;
+
+            const groundedIssue: GroundedIssue = {
+              inventoryRef: section.issue.inventoryRef || '',
+              section: section.section,
+              label: section.issue.label,
+              description: section.issue.description,
+              severity: section.issue.severity,
+              conversionImpact: section.issue.conversionImpact,
+              elementSelector: section.issue.elementSelector,
+            };
+
+            const validation = validateIssueAgainstInventory(groundedIssue, inventory);
+            if (validation.valid) {
+              validatedSections.push(section);
+            } else {
+              console.log(`[gemini-vision] Rejected hallucinated issue: "${section.issue.label}" - ${validation.reason}`);
+            }
+          }
+          sections = validatedSections;
+        }
+
+        return { sections: sections.slice(0, 3), inventory };
+      }
     }
   } catch {
-    // Try to extract JSON
+    // Try to extract JSON from the response
     const match = text.match(/\{[\s\S]*\}/);
     if (match) {
       try {
         const parsed = JSON.parse(match[0]);
         if (parsed && Array.isArray(parsed.sections)) {
-          return parsed.sections.slice(0, 3); // Max 3 sections
+          return { sections: parsed.sections.slice(0, 3), inventory: parsed.inventory };
         }
       } catch {
         // Could not parse
       }
     }
   }
-  return [];
+  return { sections: [] };
 }
 
 export async function analyzePageSections(
@@ -308,7 +345,7 @@ export async function analyzePageSections(
   const realBuffer = Buffer.isBuffer(screenshotBuffer) ? screenshotBuffer : Buffer.from(screenshotBuffer);
   const base64Image = realBuffer.toString('base64');
 
-  console.log('[gemini-vision] Analyzing page sections...');
+  console.log('[gemini-vision] Analyzing page sections with grounded prompt...');
 
   try {
     const result = await model.generateContent([
@@ -324,10 +361,10 @@ export async function analyzePageSections(
     const rawText = result.response.text();
     console.log('[gemini-vision] Analysis response length:', rawText.length);
 
-    const sections = parseAnalysisResponse(rawText);
-    console.log('[gemini-vision] Issues found:', sections.length, sections.map(s => s.issue?.label));
+    const { sections, inventory } = parseAnalysisResponse(rawText);
+    console.log('[gemini-vision] Validated issues:', sections.length, sections.map(s => s.issue?.label));
 
-    return { sections, rawAnalysis: rawText };
+    return { sections, rawAnalysis: rawText, inventory };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     console.error('[gemini-vision] Analysis failed:', message);

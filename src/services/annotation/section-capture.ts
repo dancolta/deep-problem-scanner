@@ -1,4 +1,4 @@
-import type { Page } from 'puppeteer';
+import type { Page } from 'playwright';
 import sharp from 'sharp';
 import { SectionIssue } from './gemini-vision';
 import { AnnotationCoord, AnnotationSeverity } from './types';

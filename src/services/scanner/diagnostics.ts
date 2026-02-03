@@ -1,4 +1,4 @@
-import type { Page } from 'puppeteer';
+import type { Page } from 'playwright';
 import type { DiagnosticResult } from './types';
 import { withTimeout } from '../../utils/timeout';
 import { createLogger } from '../../utils/logger';
