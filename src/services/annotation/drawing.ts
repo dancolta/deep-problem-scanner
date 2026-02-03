@@ -330,49 +330,66 @@ function buildAnnotationSvg(
       `font-family="Arial, Helvetica, sans-serif" font-size="${BADGE_FONT_SIZE}" font-weight="bold" fill="white">${index + 1}</text>`
   );
 
-  // ========== 4. DRAW STRAIGHT ARROW TO EXACT TARGET CENTER ==========
-  // Arrow starts from card edge closest to target CENTER
-  // Arrow ends EXACTLY at target element center
+  // ========== 4. DRAW STRAIGHT ARROW WITH SAFETY MARGIN ==========
+  // Arrow starts from card edge
+  // Arrow ends 8px BEFORE target element edge (NOT at center)
+  // This prevents arrow from overlapping the target element
+
+  const ARROW_MARGIN = 8; // Safety margin from element edge
 
   let arrowStartX: number;
   let arrowStartY: number;
+  let arrowEndX: number;
+  let arrowEndY: number;
 
-  // Determine which edge of card to start from based on target center position
+  // Determine arrow direction and end point (stop at element edge with margin)
   if (targetCenterX < boxX) {
-    // Target center is to the left of card - start from left edge
+    // Target is to the LEFT of card
     arrowStartX = boxX;
     arrowStartY = Math.max(boxY + 15, Math.min(targetCenterY, boxY + boxHeight - 15));
+    // Arrow ends at RIGHT edge of target + margin
+    arrowEndX = targetRect.x + targetRect.w + ARROW_MARGIN;
+    arrowEndY = targetCenterY;
   } else if (targetCenterX > boxX + boxWidth) {
-    // Target center is to the right of card - start from right edge
+    // Target is to the RIGHT of card
     arrowStartX = boxX + boxWidth;
     arrowStartY = Math.max(boxY + 15, Math.min(targetCenterY, boxY + boxHeight - 15));
+    // Arrow ends at LEFT edge of target - margin
+    arrowEndX = targetRect.x - ARROW_MARGIN;
+    arrowEndY = targetCenterY;
   } else if (targetCenterY < boxY) {
-    // Target center is above card - start from top edge
+    // Target is ABOVE card
     arrowStartX = Math.max(boxX + 15, Math.min(targetCenterX, boxX + boxWidth - 15));
     arrowStartY = boxY;
+    // Arrow ends at BOTTOM edge of target + margin
+    arrowEndX = targetCenterX;
+    arrowEndY = targetRect.y + targetRect.h + ARROW_MARGIN;
   } else {
-    // Target center is below card - start from bottom edge
+    // Target is BELOW card
     arrowStartX = Math.max(boxX + 15, Math.min(targetCenterX, boxX + boxWidth - 15));
     arrowStartY = boxY + boxHeight;
+    // Arrow ends at TOP edge of target - margin
+    arrowEndX = targetCenterX;
+    arrowEndY = targetRect.y - ARROW_MARGIN;
   }
 
-  // STRAIGHT LINE from card edge to EXACT target center
+  // STRAIGHT LINE from card edge to target edge (with margin)
   parts.push(
-    `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${targetCenterX}" y2="${targetCenterY}" ` +
+    `<line x1="${arrowStartX}" y1="${arrowStartY}" x2="${arrowEndX}" y2="${arrowEndY}" ` +
       `stroke="${ANNOTATION_COLOR}" stroke-width="${ARROW_WIDTH}" />`
   );
 
-  // ARROWHEAD pointing EXACTLY at target center
-  const angle = Math.atan2(targetCenterY - arrowStartY, targetCenterX - arrowStartX);
+  // ARROWHEAD pointing at target edge
+  const angle = Math.atan2(arrowEndY - arrowStartY, arrowEndX - arrowStartX);
   const arrowAngle = Math.PI / 6; // 30 degrees
 
-  const ax1 = targetCenterX - ARROW_HEAD_SIZE * Math.cos(angle - arrowAngle);
-  const ay1 = targetCenterY - ARROW_HEAD_SIZE * Math.sin(angle - arrowAngle);
-  const ax2 = targetCenterX - ARROW_HEAD_SIZE * Math.cos(angle + arrowAngle);
-  const ay2 = targetCenterY - ARROW_HEAD_SIZE * Math.sin(angle + arrowAngle);
+  const ax1 = arrowEndX - ARROW_HEAD_SIZE * Math.cos(angle - arrowAngle);
+  const ay1 = arrowEndY - ARROW_HEAD_SIZE * Math.sin(angle - arrowAngle);
+  const ax2 = arrowEndX - ARROW_HEAD_SIZE * Math.cos(angle + arrowAngle);
+  const ay2 = arrowEndY - ARROW_HEAD_SIZE * Math.sin(angle + arrowAngle);
 
   parts.push(
-    `<polygon points="${targetCenterX},${targetCenterY} ${ax1},${ay1} ${ax2},${ay2}" fill="${ANNOTATION_COLOR}" />`
+    `<polygon points="${arrowEndX},${arrowEndY} ${ax1},${ay1} ${ax2},${ay2}" fill="${ANNOTATION_COLOR}" />`
   );
 
   // Return SVG and placement info for collision tracking
@@ -383,8 +400,8 @@ function buildAnnotationSvg(
     h: boxHeight,
     arrowStartX,
     arrowStartY,
-    arrowEndX: targetCenterX,
-    arrowEndY: targetCenterY,
+    arrowEndX,
+    arrowEndY,
   };
 
   return { svg: parts.join('\n  '), placement };

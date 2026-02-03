@@ -8,6 +8,7 @@ import { analyzePageSections, SectionIssue } from '../src/services/annotation/ge
 import { drawAnnotations } from '../src/services/annotation/drawing';
 import { compressImage, compressForEmail } from '../src/services/annotation/compression';
 import { AnnotationCoord } from '../src/services/annotation/types';
+import { VerifiedIssue } from '../src/services/scanner/playwright-scanner';
 
 // Fallback selectors for common sections
 const SECTION_FALLBACKS: Record<string, string[]> = {
@@ -207,109 +208,109 @@ export function registerAllHandlers(): void {
               continue;
             }
 
-            // 2. Analyze with Gemini - get section-based issues
-            console.time(`[IPC] analyze-${i}`);
-            const analysis = await analyzePageSections(
-              session.viewportScreenshot,
-              session.diagnostics,
-              lead.website_url
-            );
-            console.timeEnd(`[IPC] analyze-${i}`);
+            // 2. FULL PAGE SCAN - Check ALL potential issues with DOM verification
+            console.time(`[IPC] fullscan-${i}`);
+            const fullScan = await scanner.fullPageScan(session.page);
+            console.timeEnd(`[IPC] fullscan-${i}`);
 
-            console.log(`[IPC] Found ${analysis.sections.length} section issues`);
+            console.log(`[IPC] Full scan found ${fullScan.issues.length} verified issues`);
+            console.log(`[IPC] Verified data:`, JSON.stringify(fullScan.verifiedData, null, 2));
 
-            // 3. Build ALL annotations for single screenshot (max 3)
+            // 3. Select 2-3 issues - MINIMUM 2 REQUIRED
+            let selectedIssues = fullScan.issues.slice(0, 3);
+
+            // RULE: MINIMUM 2 annotations required - if less than 2, skip this lead
+            if (selectedIssues.length < 2) {
+              console.log(`[IPC] Only ${selectedIssues.length} issue(s) found for ${lead.website_url} - SKIPPING (minimum 2 required)`);
+
+              // Close the page session
+              await scanner.closePageSession(session);
+
+              // No screenshot, no email - just mark as "no issues"
+              results.push({
+                lead,
+                scanStatus: 'SUCCESS',
+                sheetRow: {
+                  company_name: lead.company_name,
+                  website_url: lead.website_url,
+                  contact_name: lead.contact_name,
+                  contact_email: lead.contact_email,
+                  scan_status: 'NO_ISSUES',
+                  screenshot_url: 'No critical issues found - well optimized page',
+                  diagnostics_summary: `Found ${selectedIssues.length} issue(s) - minimum 2 required for outreach`,
+                  email_subject: '',
+                  email_body: '',
+                  email_status: 'skip' as const,
+                },
+                issueCount: selectedIssues.length,
+              });
+              continue;
+            }
+
+            // 4. Find best viewport position (where most issues cluster)
+            const viewportHeight = fullScan.viewportHeight;
+            const issueYPositions = selectedIssues.map(issue => issue.yPosition);
+
+            // Find scroll position that captures most issues
+            let bestScrollY = 0;
+            let maxIssuesInView = 0;
+
+            for (const issue of selectedIssues) {
+              // Try scrolling so this issue is in upper third of viewport
+              const testScrollY = Math.max(0, issue.yPosition - viewportHeight * 0.3);
+
+              // Count how many issues would be visible at this scroll position
+              const issuesInView = selectedIssues.filter(i => {
+                const relativeY = i.yPosition - testScrollY;
+                return relativeY >= 0 && relativeY < viewportHeight;
+              }).length;
+
+              if (issuesInView > maxIssuesInView) {
+                maxIssuesInView = issuesInView;
+                bestScrollY = testScrollY;
+              }
+            }
+
+            console.log(`[IPC] Best scroll position: ${bestScrollY}px (${maxIssuesInView} issues in view)`);
+
+            // 5. Capture screenshot at optimal position
+            const screenshotBuffer = await scanner.captureAtPosition(session.page, bestScrollY);
+
+            // 6. Build annotations with positions relative to viewport
             const annotations: AnnotationCoord[] = [];
             const annotationLabels: string[] = [];
 
-            for (const section of analysis.sections.slice(0, 3)) {
-              // Get fallback selectors for this section type
-              const fallbacks = SECTION_FALLBACKS[section.section] || [];
+            for (const issue of selectedIssues) {
+              // Calculate position relative to current viewport
+              const relativeY = issue.yPosition - bestScrollY;
 
-              // Build element selector with fallbacks
-              const issueLabel = section.issue?.label || '';
-              const primaryElementSelector = section.issue?.elementSelector;
-              const fallbackElementSelector = getElementFallbackSelector(issueLabel);
-              const combinedElementSelector = [primaryElementSelector, fallbackElementSelector]
-                .filter(Boolean)
-                .join(', ');
-
-              console.log(`[IPC] Looking for element "${issueLabel}" with selectors: ${combinedElementSelector}`);
-
-              // Try to find element bounds on the viewport screenshot
-              let elementBounds: { x: number; y: number; width: number; height: number } | null = null;
-
-              // Try each selector to find element
-              const selectors = combinedElementSelector.split(',').map(s => s.trim()).filter(Boolean);
-              for (const selector of selectors) {
-                try {
-                  const el = await session.page.$(selector);
-                  if (el) {
-                    const box = await el.boundingBox();
-                    if (box && box.width > 20 && box.height > 10) {
-                      elementBounds = {
-                        x: Math.round(box.x),
-                        y: Math.round(box.y),
-                        width: Math.round(box.width),
-                        height: Math.round(box.height),
-                      };
-                      console.log(`[IPC] Found element "${selector}" at (${elementBounds.x}, ${elementBounds.y}) ${elementBounds.width}x${elementBounds.height}`);
-                      break;
-                    }
-                  }
-                } catch {
-                  // Try next selector
-                }
+              // Only include if visible in viewport
+              if (relativeY >= -50 && relativeY < viewportHeight + 50) {
+                const bounds = issue.elementBounds;
+                annotations.push({
+                  x: bounds.x,
+                  y: Math.max(0, bounds.y - bestScrollY), // Adjust Y for scroll
+                  width: bounds.width,
+                  height: bounds.height,
+                  label: issue.label,
+                  severity: issue.severity,
+                  description: issue.description,
+                  conversionImpact: issue.conversionImpact,
+                });
+                annotationLabels.push(issue.label);
+                console.log(`[IPC] Adding annotation: "${issue.label}" at relative Y=${relativeY}`);
               }
-
-              // Use found bounds or smart fallback based on section type
-              if (!elementBounds) {
-                const viewportSize = session.page.viewportSize();
-                const imgWidth = viewportSize?.width || 1920;
-                const imgHeight = viewportSize?.height || 1080;
-
-                // Different fallback regions based on section type
-                const regionMap: Record<string, { x: number; y: number; w: number; h: number }> = {
-                  hero: { x: 0.1, y: 0.15, w: 0.8, h: 0.3 },
-                  cta: { x: 0.2, y: 0.4, w: 0.6, h: 0.15 },
-                  trust: { x: 0.1, y: 0.6, w: 0.8, h: 0.2 },
-                  navigation: { x: 0.1, y: 0.02, w: 0.8, h: 0.08 },
-                };
-                const region = regionMap[section.section] || { x: 0.2, y: 0.3, w: 0.6, h: 0.2 };
-
-                elementBounds = {
-                  x: Math.round(imgWidth * region.x),
-                  y: Math.round(imgHeight * region.y),
-                  width: Math.round(imgWidth * region.w),
-                  height: Math.round(imgHeight * region.h),
-                };
-                console.log(`[IPC] Using fallback bounds for "${section.section}": (${elementBounds.x}, ${elementBounds.y}) ${elementBounds.width}x${elementBounds.height}`);
-              }
-
-              // Create annotation
-              annotations.push({
-                x: elementBounds.x,
-                y: elementBounds.y,
-                width: elementBounds.width,
-                height: elementBounds.height,
-                label: section.issue?.label || 'Issue Detected',
-                severity: (section.issue?.severity as any) || 'warning',
-                description: section.issue?.description || '',
-                conversionImpact: section.issue?.conversionImpact,
-              });
-
-              annotationLabels.push(section.issue?.label || 'Issue');
             }
 
-            // 4. Draw ALL annotations on single viewport screenshot
+            // 7. Draw ALL annotations on the screenshot
             let finalScreenshot: Buffer;
             if (annotations.length > 0) {
-              console.log(`[IPC] Drawing ${annotations.length} annotations on single screenshot`);
-              const annotatedBuffer = await drawAnnotations(session.viewportScreenshot, annotations);
+              console.log(`[IPC] Drawing ${annotations.length} verified annotations`);
+              const annotatedBuffer = await drawAnnotations(screenshotBuffer, annotations);
               finalScreenshot = await compressForEmail(annotatedBuffer, 400, 1200);
             } else {
-              console.error(`[IPC] WARNING: No annotations created for ${lead.website_url}`);
-              finalScreenshot = await compressForEmail(session.viewportScreenshot, 400, 1200);
+              console.error(`[IPC] WARNING: No annotations visible in viewport for ${lead.website_url}`);
+              finalScreenshot = await compressForEmail(screenshotBuffer, 400, 1200);
             }
 
             // Store as single screenshot with all annotations
@@ -337,16 +338,15 @@ export function registerAllHandlers(): void {
             }
             console.timeEnd(`[IPC] drive-${i}`);
 
-            // 5. Generate email with issue details
+            // 5. Generate email with issue details (using verified data)
             console.time(`[IPC] email-${i}`);
-            const issueLabels = sectionScreenshots.map(s => s.label);
             const promptContext = buildPromptContext({
               companyName: lead.company_name,
               contactName: lead.contact_name,
               websiteUrl: lead.website_url,
               diagnostics: session.diagnostics,
               screenshotUrl: driveResults[0]?.directLink || '',
-              annotationLabels: issueLabels,
+              annotationLabels: annotationLabels,
             });
 
             const email = await emailGen.generateEmail(promptContext);
