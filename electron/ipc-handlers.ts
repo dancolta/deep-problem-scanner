@@ -218,12 +218,11 @@ export function registerAllHandlers(): void {
 
             console.log(`[IPC] Found ${analysis.sections.length} section issues`);
 
-            // 3. Capture section screenshots and annotate
-            const sectionScreenshots: { buffer: Buffer; label: string; description: string; impact: string }[] = [];
+            // 3. Build ALL annotations for single screenshot (max 3)
+            const annotations: AnnotationCoord[] = [];
+            const annotationLabels: string[] = [];
 
-            for (const section of analysis.sections.slice(0, 2)) {
-              console.time(`[IPC] section-${section.section}`);
-
+            for (const section of analysis.sections.slice(0, 3)) {
               // Get fallback selectors for this section type
               const fallbacks = SECTION_FALLBACKS[section.section] || [];
 
@@ -235,81 +234,91 @@ export function registerAllHandlers(): void {
                 .filter(Boolean)
                 .join(', ');
 
-              console.log(`[IPC] Looking for element with selectors: ${combinedElementSelector}`);
+              console.log(`[IPC] Looking for element "${issueLabel}" with selectors: ${combinedElementSelector}`);
 
-              // Capture the section with element bounds
-              const sectionCapture = await scanner.captureSectionScreenshot(
-                session.page,
-                section.sectionSelector,
-                fallbacks,
-                combinedElementSelector || undefined
-              );
+              // Try to find element bounds on the viewport screenshot
+              let elementBounds: { x: number; y: number; width: number; height: number } | null = null;
 
-              if (!sectionCapture) {
-                console.error(`[IPC] SCREENSHOT FAILURE: Could not capture section "${section.section}" for ${lead.website_url}`);
-                console.error(`[IPC] Tried selectors: ${section.sectionSelector}, fallbacks: ${fallbacks.join(', ')}`);
-                continue;
-              }
-
-              if (sectionCapture) {
-                // Use element bounds if found, otherwise smart fallback based on section type
-                let annotationBounds: { x: number; y: number; width: number; height: number };
-                const { imageWidth, imageHeight } = sectionCapture;
-
-                console.log(`[IPC] Screenshot dimensions: ${imageWidth}x${imageHeight}`);
-
-                if (sectionCapture.elementBounds) {
-                  // Element found - use its bounds directly
-                  annotationBounds = sectionCapture.elementBounds;
-                  console.log(`[IPC] Using element bounds for annotation: (${annotationBounds.x}, ${annotationBounds.y}) ${annotationBounds.width}x${annotationBounds.height}`);
-                } else {
-                  // Fallback: estimate position based on common layout patterns
-                  // Most headlines/CTAs are centered horizontally in the upper-middle portion
-                  annotationBounds = {
-                    x: Math.round(imageWidth * 0.2), // Start at 20% from left
-                    y: Math.round(imageHeight * 0.25), // Start at 25% from top
-                    width: Math.round(imageWidth * 0.6), // Cover 60% width (centered)
-                    height: Math.round(imageHeight * 0.25), // Cover 25% height
-                  };
-                  console.log(`[IPC] Using fallback bounds for annotation: (${annotationBounds.x}, ${annotationBounds.y}) ${annotationBounds.width}x${annotationBounds.height}`);
+              // Try each selector to find element
+              const selectors = combinedElementSelector.split(',').map(s => s.trim()).filter(Boolean);
+              for (const selector of selectors) {
+                try {
+                  const el = await session.page.$(selector);
+                  if (el) {
+                    const box = await el.boundingBox();
+                    if (box && box.width > 20 && box.height > 10) {
+                      elementBounds = {
+                        x: Math.round(box.x),
+                        y: Math.round(box.y),
+                        width: Math.round(box.width),
+                        height: Math.round(box.height),
+                      };
+                      console.log(`[IPC] Found element "${selector}" at (${elementBounds.x}, ${elementBounds.y}) ${elementBounds.width}x${elementBounds.height}`);
+                      break;
+                    }
+                  }
+                } catch {
+                  // Try next selector
                 }
-
-                // Create annotation
-                const annotation: AnnotationCoord = {
-                  x: annotationBounds.x,
-                  y: annotationBounds.y,
-                  width: annotationBounds.width,
-                  height: annotationBounds.height,
-                  label: section.issue?.label || 'Issue Detected',
-                  severity: (section.issue?.severity as any) || 'warning',
-                  description: section.issue?.description || '',
-                  conversionImpact: section.issue?.conversionImpact,
-                };
-
-                // Draw annotation on section screenshot
-                const annotatedBuffer = await drawAnnotations(sectionCapture.buffer, [annotation]);
-
-                // Compress for email
-                const compressedBuffer = await compressForEmail(annotatedBuffer, 400, 1200);
-
-                sectionScreenshots.push({
-                  buffer: compressedBuffer,
-                  label: section.issue?.label || 'Issue',
-                  description: section.issue?.description || '',
-                  impact: section.issue?.conversionImpact || '',
-                });
-
-                console.log(`[IPC] Captured section "${section.section}" with annotation`);
               }
 
-              console.timeEnd(`[IPC] section-${section.section}`);
+              // Use found bounds or smart fallback based on section type
+              if (!elementBounds) {
+                const viewportSize = session.page.viewportSize();
+                const imgWidth = viewportSize?.width || 1920;
+                const imgHeight = viewportSize?.height || 1080;
+
+                // Different fallback regions based on section type
+                const regionMap: Record<string, { x: number; y: number; w: number; h: number }> = {
+                  hero: { x: 0.1, y: 0.15, w: 0.8, h: 0.3 },
+                  cta: { x: 0.2, y: 0.4, w: 0.6, h: 0.15 },
+                  trust: { x: 0.1, y: 0.6, w: 0.8, h: 0.2 },
+                  navigation: { x: 0.1, y: 0.02, w: 0.8, h: 0.08 },
+                };
+                const region = regionMap[section.section] || { x: 0.2, y: 0.3, w: 0.6, h: 0.2 };
+
+                elementBounds = {
+                  x: Math.round(imgWidth * region.x),
+                  y: Math.round(imgHeight * region.y),
+                  width: Math.round(imgWidth * region.w),
+                  height: Math.round(imgHeight * region.h),
+                };
+                console.log(`[IPC] Using fallback bounds for "${section.section}": (${elementBounds.x}, ${elementBounds.y}) ${elementBounds.width}x${elementBounds.height}`);
+              }
+
+              // Create annotation
+              annotations.push({
+                x: elementBounds.x,
+                y: elementBounds.y,
+                width: elementBounds.width,
+                height: elementBounds.height,
+                label: section.issue?.label || 'Issue Detected',
+                severity: (section.issue?.severity as any) || 'warning',
+                description: section.issue?.description || '',
+                conversionImpact: section.issue?.conversionImpact,
+              });
+
+              annotationLabels.push(section.issue?.label || 'Issue');
             }
 
-            // Log if no screenshots were captured
-            if (sectionScreenshots.length === 0) {
-              console.error(`[IPC] WARNING: No section screenshots captured for ${lead.website_url}`);
-              console.error(`[IPC] Analysis found ${analysis.sections.length} issues but none could be captured`);
+            // 4. Draw ALL annotations on single viewport screenshot
+            let finalScreenshot: Buffer;
+            if (annotations.length > 0) {
+              console.log(`[IPC] Drawing ${annotations.length} annotations on single screenshot`);
+              const annotatedBuffer = await drawAnnotations(session.viewportScreenshot, annotations);
+              finalScreenshot = await compressForEmail(annotatedBuffer, 400, 1200);
+            } else {
+              console.error(`[IPC] WARNING: No annotations created for ${lead.website_url}`);
+              finalScreenshot = await compressForEmail(session.viewportScreenshot, 400, 1200);
             }
+
+            // Store as single screenshot with all annotations
+            const sectionScreenshots = [{
+              buffer: finalScreenshot,
+              label: annotationLabels.join(' | '),
+              description: '',
+              impact: '',
+            }];
 
             // Close the page session
             await scanner.closePageSession(session);

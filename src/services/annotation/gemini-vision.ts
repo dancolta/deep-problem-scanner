@@ -33,122 +33,121 @@ function buildAnalysisPrompt(
     .map((d) => `- ${d.name}: ${d.status} (score: ${d.score}/100) - ${d.details}`)
     .join('\n');
 
-  return `You are an expert homepage conversion auditor. Analyze this homepage screenshot from ${url}.
+  return `You are a senior CRO (Conversion Rate Optimization) expert. Analyze this homepage screenshot from ${url}.
 
 ## DIAGNOSTIC DATA
 ${diagnosticLines}
 
-## YOUR TASK
-Identify the TOP 2 most critical conversion-killing issues on this page. Each issue must be:
-1. CLEARLY VISIBLE in the screenshot
-2. A REAL conversion problem (not minor nitpicks)
-3. Located in a SPECIFIC page section
+## YOUR MISSION
+Find 2-3 REAL conversion-killing issues on this page. Quality over quantity.
 
-## STRICT ISSUE CRITERIA (only flag if truly problematic)
+## STRICT RULES - READ CAREFULLY
 
-### HERO SECTION ISSUES (section: "hero", selector: "section:first-of-type, .hero, [class*='hero'], header + section, main > section:first-child")
-- **Flag if**: Headline is completely generic ("Welcome", "Solutions") with NO value proposition
-- **Flag if**: NO CTA button visible above the fold at all
-- **Flag if**: Obvious stock photo (handshake, generic office) that damages credibility
-- **Do NOT flag**: Minor headline improvements, stylistic preferences
+### ONLY FLAG IF:
+1. **Objectively measurable** - Not opinion, but clear UX/conversion problem
+2. **Visible in screenshot** - You can point to the exact element
+3. **Backed by data** - Use only the stats provided below
+4. **Different locations** - Each issue must be in a DIFFERENT area of the page (spread out for clear annotations)
 
-### CTA BUTTON ISSUES (section: "cta", selector: "[class*='cta'], .btn-primary, button[type='submit'], a[href*='contact'], a[href*='demo'], a[href*='signup']")
-- **Flag if**: Button is ghost/outline style AND blends into background (hard to see)
-- **Flag if**: Button text is completely generic ("Submit", "Click Here") with no value
-- **Flag if**: Primary CTA is missing or hidden
-- **Do NOT flag**: Minor color preferences, small size differences
+### NEVER FLAG:
+- Stylistic preferences ("I'd make this blue")
+- Minor improvements ("headline could be stronger")
+- Things that exist but "could be better"
+- Multiple issues in the same area
 
-### TRUST SIGNALS (section: "trust", selector: "[class*='logo'], [class*='client'], [class*='partner'], [class*='trust'], [class*='testimonial']")
-- **Flag if**: ZERO client logos, badges, or social proof visible on entire page
-- **Flag if**: Testimonials are clearly fake (stock photos, no names)
-- **Do NOT flag**: If some trust elements exist but could be "better"
+## ISSUE CATEGORIES
 
-### NAVIGATION (section: "navigation", selector: "nav, header, [class*='nav'], [class*='header']")
-- **Flag if**: More than 8 menu items creating confusion
-- **Flag if**: Critical pages (Contact, Pricing) are hidden or missing
-- **Do NOT flag**: Minor label improvements
+### 1. CTA PROBLEMS (section: "cta")
+**Flag ONLY if:**
+- Primary CTA button is MISSING from above the fold
+- Button is ghost/outline AND same color as background (invisible)
+- Button text is meaningless: "Submit", "Click", "Go"
+**Selector:** "a[href*='start'], a[href*='demo'], a[href*='contact'], button.primary, .btn-primary, [class*='cta']"
 
-## CONVERSION IMPACT STATS (use these exactly)
-- Ghost/outline CTA buttons: "30% fewer clicks than solid buttons"
-- Missing trust signals: "42% conversion lift when logos added"
+### 2. TRUST SIGNALS (section: "trust")
+**Flag ONLY if:**
+- ZERO client logos anywhere visible
+- ZERO testimonials, reviews, or social proof
+- Trust elements use obvious stock photos
+**Selector:** "[class*='logo'], [class*='client'], [class*='partner'], [class*='testimonial']"
+
+### 3. VALUE PROPOSITION (section: "hero")
+**Flag ONLY if:**
+- Headline is generic fluff: "Welcome", "Solutions", "Services"
+- No subheadline explaining what company does
+- Visitor can't understand offering in 5 seconds
+**Selector:** "h1, [class*='hero'] h1, section:first-of-type h1"
+
+### 4. NAVIGATION (section: "navigation")
+**Flag ONLY if:**
+- More than 8 top-level menu items
+- Contact or Pricing completely missing
+**Selector:** "nav, header nav, [class*='nav']"
+
+### 5. FORM FRICTION (section: "cta")
+**Flag ONLY if:**
+- Form has more than 4 fields visible
+- Required fields not marked
+- No privacy/trust message near form
+**Selector:** "form, [class*='form']"
+
+## CONVERSION STATS (use exactly as written)
+- Ghost CTA: "30% fewer clicks than solid buttons"
+- No trust signals: "42% conversion lift when logos added"
 - No CTA above fold: "84% less engagement"
 - Generic headline: "Up to 50% bounce rate increase"
-- Missing testimonials: "34% conversion increase when added"
-- Confusing navigation: "Up to 50% higher bounce rate"
+- Too many nav items: "Up to 50% higher bounce rate"
+- Form friction: "Each extra field reduces conversions 10%"
 
 ## OUTPUT FORMAT
 
-Return ONLY valid JSON with exactly 2 issues (or fewer if page is well-optimized):
+Return ONLY valid JSON. Return 2-3 issues if found, fewer if page is good:
 
 {
   "sections": [
     {
-      "section": "hero" | "cta" | "trust" | "pricing" | "testimonials" | "footer" | "navigation",
-      "sectionSelector": "<CSS selector to capture this entire section>",
+      "section": "hero" | "cta" | "trust" | "navigation",
+      "sectionSelector": "<broad section selector>",
       "issue": {
-        "label": "<SPECIFIC problem statement - see examples>",
-        "conversionImpact": "<exact stat from list above>",
+        "label": "<5-8 word specific problem>",
+        "conversionImpact": "<exact stat from above>",
         "severity": "critical" | "warning",
-        "elementSelector": "<CSS selector for the SPECIFIC problematic element>"
+        "elementSelector": "<CSS selector for the SPECIFIC element>"
       }
     }
   ]
 }
 
-## LABEL EXAMPLES (be specific and direct)
+## GOOD vs BAD LABELS
 
-GOOD labels (specific, actionable):
-- "No Client Logos Above Fold"
-- "Missing CTA Button In Hero"
-- "Generic 'Welcome' Headline"
-- "Ghost Button Hard To See"
-- "No Social Proof Visible"
-- "Too Many Nav Menu Items"
-- "No Contact Link In Header"
+✅ GOOD (specific, factual):
+- "No CTA Button Above Fold"
+- "Zero Client Logos Visible"
+- "Ghost Button Blends Into Background"
+- "Headline Says Nothing Specific"
+- "9 Navigation Items Cause Confusion"
 
-BAD labels (too vague):
-- "Headline Could Be Better"
-- "Trust Signals Missing"
-- "CTA Issues"
+❌ BAD (vague, opinionated):
+- "CTA Could Be Improved"
+- "Add More Trust Elements"
+- "Headline Needs Work"
+- "Navigation Could Be Cleaner"
 
-## ELEMENT SELECTOR PATTERNS
+## FINAL CHECKLIST
+Before returning, verify:
+- [ ] Each issue is in a DIFFERENT screen area (for non-overlapping annotations)
+- [ ] Each issue uses an EXACT stat from the list
+- [ ] Each label is 5-8 words and specific
+- [ ] No opinions, only measurable problems
 
-For HEADLINE issues: "h1, .hero h1, section:first-of-type h1, [class*='hero'] h1"
-For CTA/BUTTON issues: "a[href*='start'], a[href*='demo'], button.primary, .btn-primary"
-For TRUST/LOGO issues: "[class*='logo'] img, [class*='client'] img, [class*='trust']"
-For NAVIGATION issues: "nav, header nav, [class*='nav']"
-
-## EXAMPLES
-
-Good issue:
-{
-  "section": "trust",
-  "sectionSelector": "section:first-of-type",
-  "issue": {
-    "label": "No Client Logos Above Fold",
-    "conversionImpact": "42% conversion lift when logos added",
-    "severity": "warning",
-    "elementSelector": "[class*='hero'], section:first-of-type"
-  }
-}
-
-Bad issue (too vague):
-{
-  "section": "hero",
-  "issue": {
-    "label": "Headline Could Be More Compelling",
-    ...
-  }
-}
-
-IMPORTANT: Only return issues that would meaningfully impact conversions. If the page is decent, return fewer issues or an empty array.`;
+If page is professionally designed with clear CTA, value prop, and trust signals - return 0-1 issues only.`;
 }
 
 function parseAnalysisResponse(text: string): SectionIssue[] {
   try {
     const parsed = JSON.parse(text);
     if (parsed && Array.isArray(parsed.sections)) {
-      return parsed.sections.slice(0, 2); // Max 2 sections
+      return parsed.sections.slice(0, 3); // Max 3 sections
     }
   } catch {
     // Try to extract JSON
@@ -157,7 +156,7 @@ function parseAnalysisResponse(text: string): SectionIssue[] {
       try {
         const parsed = JSON.parse(match[0]);
         if (parsed && Array.isArray(parsed.sections)) {
-          return parsed.sections.slice(0, 2);
+          return parsed.sections.slice(0, 3); // Max 3 sections
         }
       } catch {
         // Could not parse

@@ -34,16 +34,17 @@ const ARROW_MIN_LENGTH = 50;
 const ARROW_MAX_LENGTH = 150;
 const ARROW_IDEAL_LENGTH = 100; // Target 80-120px
 
-// Sizes increased by 20%
-const CARD_MAX_WIDTH = 336; // Was 280, now 336 (+20%)
-const CARD_PADDING = 17; // Was 14, now ~17 (+20%)
-const LABEL_FONT_SIZE = 17; // Was 14, now ~17 (+20%)
-const IMPACT_FONT_SIZE = 13; // Was 11, now ~13 (+20%)
-const LINE_HEIGHT = 22; // Was 18, now ~22 (+20%)
-const CHAR_WIDTH = 9; // Was 7.5, now 9 (+20%)
-const BADGE_RADIUS = 13; // Was 11, now ~13 (+20%)
-const ARROW_WIDTH = 2.5; // Was 2, now 2.5 (+25%)
-const ARROW_HEAD_SIZE = 12; // Was 10, now 12 (+20%)
+// Sizes increased by 50% total (20% + 30%)
+const CARD_MAX_WIDTH = 437; // 336 * 1.3
+const CARD_PADDING = 22; // 17 * 1.3
+const LABEL_FONT_SIZE = 22; // 17 * 1.3
+const IMPACT_FONT_SIZE = 17; // 13 * 1.3
+const LINE_HEIGHT = 29; // 22 * 1.3
+const CHAR_WIDTH = 12; // 9 * 1.3
+const BADGE_RADIUS = 17; // 13 * 1.3
+const BADGE_FONT_SIZE = 18; // 14 * 1.3
+const ARROW_WIDTH = 3; // Slightly thicker for larger card
+const ARROW_HEAD_SIZE = 14; // 12 * 1.15
 
 function escapeXml(text: string): string {
   return text
@@ -113,12 +114,25 @@ function distance(x1: number, y1: number, x2: number, y2: number): number {
   return Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
 }
 
+// Track placed cards for collision avoidance
+type PlacedCard = {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  arrowStartX: number;
+  arrowStartY: number;
+  arrowEndX: number;
+  arrowEndY: number;
+};
+
 function buildAnnotationSvg(
   ann: AnnotationCoord,
   index: number,
   imgWidth: number,
-  imgHeight: number
-): string {
+  imgHeight: number,
+  placedCards: PlacedCard[] = []
+): { svg: string; placement: PlacedCard | null } {
   const clamped = clampAnnotation(ann, imgWidth, imgHeight);
   const parts: string[] = [];
 
@@ -137,7 +151,7 @@ function buildAnnotationSvg(
   const label = clamped.label || '';
   const rawImpact = clamped.conversionImpact || '';
 
-  if (label.length === 0) return '';
+  if (label.length === 0) return { svg: '', placement: null };
 
   // ========== TEXT WRAPPING ==========
   const textAreaWidth = CARD_MAX_WIDTH - CARD_PADDING * 2 - 12; // Account for left accent
@@ -175,6 +189,16 @@ function buildAnnotationSvg(
   // Try gaps from small to large to find optimal arrow length
   const gapsToTry = [30, 50, 70, 90, 110, 130];
 
+  // Helper to check if candidate overlaps any placed card
+  const overlapsPlacedCards = (cardRect: { x: number; y: number; w: number; h: number }): boolean => {
+    for (const placed of placedCards) {
+      if (rectsOverlap(cardRect, placed, 20)) { // 20px padding between cards
+        return true;
+      }
+    }
+    return false;
+  };
+
   for (const gap of gapsToTry) {
     // Right of target
     const rightX = targetRect.x + targetRect.w + gap;
@@ -185,7 +209,7 @@ function buildAnnotationSvg(
     const rightArrowStartY = Math.max(rightClampedY + 15, Math.min(targetCenterY, rightClampedY + boxHeight - 15));
     const rightArrowLen = distance(rightArrowStartX, rightArrowStartY, targetCenterX, targetCenterY);
     const rightCardRect = { x: rightClampedX, y: rightClampedY, w: boxWidth, h: boxHeight };
-    if (!rectsOverlap(rightCardRect, targetRect, 10) && rightArrowLen >= ARROW_MIN_LENGTH && rightArrowLen <= ARROW_MAX_LENGTH) {
+    if (!rectsOverlap(rightCardRect, targetRect, 10) && !overlapsPlacedCards(rightCardRect) && rightArrowLen >= ARROW_MIN_LENGTH && rightArrowLen <= ARROW_MAX_LENGTH) {
       candidates.push({ x: rightClampedX, y: rightClampedY, arrowLength: rightArrowLen, arrowStartX: rightArrowStartX, arrowStartY: rightArrowStartY, name: 'right' });
     }
 
@@ -198,7 +222,7 @@ function buildAnnotationSvg(
     const leftArrowStartY = Math.max(leftClampedY + 15, Math.min(targetCenterY, leftClampedY + boxHeight - 15));
     const leftArrowLen = distance(leftArrowStartX, leftArrowStartY, targetCenterX, targetCenterY);
     const leftCardRect = { x: leftClampedX, y: leftClampedY, w: boxWidth, h: boxHeight };
-    if (!rectsOverlap(leftCardRect, targetRect, 10) && leftArrowLen >= ARROW_MIN_LENGTH && leftArrowLen <= ARROW_MAX_LENGTH) {
+    if (!rectsOverlap(leftCardRect, targetRect, 10) && !overlapsPlacedCards(leftCardRect) && leftArrowLen >= ARROW_MIN_LENGTH && leftArrowLen <= ARROW_MAX_LENGTH) {
       candidates.push({ x: leftClampedX, y: leftClampedY, arrowLength: leftArrowLen, arrowStartX: leftArrowStartX, arrowStartY: leftArrowStartY, name: 'left' });
     }
 
@@ -211,7 +235,7 @@ function buildAnnotationSvg(
     const aboveArrowStartY = aboveClampedY + boxHeight;
     const aboveArrowLen = distance(aboveArrowStartX, aboveArrowStartY, targetCenterX, targetCenterY);
     const aboveCardRect = { x: aboveClampedX, y: aboveClampedY, w: boxWidth, h: boxHeight };
-    if (!rectsOverlap(aboveCardRect, targetRect, 10) && aboveArrowLen >= ARROW_MIN_LENGTH && aboveArrowLen <= ARROW_MAX_LENGTH) {
+    if (!rectsOverlap(aboveCardRect, targetRect, 10) && !overlapsPlacedCards(aboveCardRect) && aboveArrowLen >= ARROW_MIN_LENGTH && aboveArrowLen <= ARROW_MAX_LENGTH) {
       candidates.push({ x: aboveClampedX, y: aboveClampedY, arrowLength: aboveArrowLen, arrowStartX: aboveArrowStartX, arrowStartY: aboveArrowStartY, name: 'above' });
     }
 
@@ -224,7 +248,7 @@ function buildAnnotationSvg(
     const belowArrowStartY = belowClampedY;
     const belowArrowLen = distance(belowArrowStartX, belowArrowStartY, targetCenterX, targetCenterY);
     const belowCardRect = { x: belowClampedX, y: belowClampedY, w: boxWidth, h: boxHeight };
-    if (!rectsOverlap(belowCardRect, targetRect, 10) && belowArrowLen >= ARROW_MIN_LENGTH && belowArrowLen <= ARROW_MAX_LENGTH) {
+    if (!rectsOverlap(belowCardRect, targetRect, 10) && !overlapsPlacedCards(belowCardRect) && belowArrowLen >= ARROW_MIN_LENGTH && belowArrowLen <= ARROW_MAX_LENGTH) {
       candidates.push({ x: belowClampedX, y: belowClampedY, arrowLength: belowArrowLen, arrowStartX: belowArrowStartX, arrowStartY: belowArrowStartY, name: 'below' });
     }
   }
@@ -302,8 +326,8 @@ function buildAnnotationSvg(
 
   parts.push(
     `<circle cx="${badgeX}" cy="${badgeY}" r="${BADGE_RADIUS}" fill="${ANNOTATION_COLOR}" />`,
-    `<text x="${badgeX}" y="${badgeY + 5}" text-anchor="middle" ` +
-      `font-family="Arial, Helvetica, sans-serif" font-size="14" font-weight="bold" fill="white">${index + 1}</text>`
+    `<text x="${badgeX}" y="${badgeY + 6}" text-anchor="middle" ` +
+      `font-family="Arial, Helvetica, sans-serif" font-size="${BADGE_FONT_SIZE}" font-weight="bold" fill="white">${index + 1}</text>`
   );
 
   // ========== 4. DRAW STRAIGHT ARROW TO EXACT TARGET CENTER ==========
@@ -351,7 +375,19 @@ function buildAnnotationSvg(
     `<polygon points="${targetCenterX},${targetCenterY} ${ax1},${ay1} ${ax2},${ay2}" fill="${ANNOTATION_COLOR}" />`
   );
 
-  return parts.join('\n  ');
+  // Return SVG and placement info for collision tracking
+  const placement: PlacedCard = {
+    x: boxX,
+    y: boxY,
+    w: boxWidth,
+    h: boxHeight,
+    arrowStartX,
+    arrowStartY,
+    arrowEndX: targetCenterX,
+    arrowEndY: targetCenterY,
+  };
+
+  return { svg: parts.join('\n  '), placement };
 }
 
 export async function drawAnnotations(
@@ -370,13 +406,26 @@ export async function drawAnnotations(
 
   console.log(`[drawing] Image dimensions: ${imgWidth}x${imgHeight}, annotations: ${annotations.length}`);
 
-  const svgElements = annotations
-    .slice(0, 4) // Max 4 annotations
-    .map((ann, i) => {
-      console.log(`[drawing] Annotation ${i+1}: "${ann.label}" at (${ann.x}, ${ann.y}) ${ann.width}x${ann.height}`);
-      return buildAnnotationSvg(ann, i, imgWidth, imgHeight);
-    })
-    .join('\n  ');
+  // Track placed cards to avoid overlaps
+  const placedCards: PlacedCard[] = [];
+  const svgParts: string[] = [];
+
+  // Process annotations sequentially to track placements
+  const toProcess = annotations.slice(0, 3); // Max 3 annotations
+  for (let i = 0; i < toProcess.length; i++) {
+    const ann = toProcess[i];
+    console.log(`[drawing] Annotation ${i+1}: "${ann.label}" at (${ann.x}, ${ann.y}) ${ann.width}x${ann.height}`);
+
+    const result = buildAnnotationSvg(ann, i, imgWidth, imgHeight, placedCards);
+
+    if (result.svg && result.placement) {
+      svgParts.push(result.svg);
+      placedCards.push(result.placement);
+      console.log(`[drawing] Placed card ${i+1} at (${result.placement.x}, ${result.placement.y})`);
+    }
+  }
+
+  const svgElements = svgParts.join('\n  ');
 
   const svgString =
     `<svg xmlns="http://www.w3.org/2000/svg" width="${imgWidth}" height="${imgHeight}">\n` +
