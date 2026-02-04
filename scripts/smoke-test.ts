@@ -5,7 +5,7 @@
 import 'dotenv/config';
 
 import { CsvParser } from '../src/services/csv/csv-parser';
-import { ScannerService } from '../src/services/scanner/scanner-service';
+import { PlaywrightScanner } from '../src/services/scanner/playwright-scanner';
 import { AnnotationService } from '../src/services/annotation/annotation-service';
 import { compressImage } from '../src/services/annotation/compression';
 import { GoogleAuthService } from '../src/services/google/auth';
@@ -63,13 +63,33 @@ async function main() {
   }
 
   // Step 3: Scan URL
-  let scanner: ScannerService | null = null;
+  let scanner: PlaywrightScanner | null = null;
   try {
-    scanner = new ScannerService();
+    scanner = new PlaywrightScanner();
     await scanner.initialize();
-    scanResult = await scanner.scanHomepage('https://example.com');
-    const diagCount = scanResult.diagnostics.length;
-    console.log(`  \u2713 Step 3: Scan URL \u2014 status=${scanResult.status}, diagnostics=${diagCount}`);
+    const session = await scanner.openPageForAnalysis('https://example.com');
+    if (session) {
+      scanResult = {
+        url: 'https://example.com',
+        status: 'SUCCESS',
+        diagnostics: session.diagnostics,
+        screenshotBase64: session.viewportScreenshot.toString('base64'),
+        loadTimeMs: session.loadTimeMs,
+        timestamp: new Date().toISOString(),
+      };
+      await session.context.close();
+    } else {
+      scanResult = {
+        url: 'https://example.com',
+        status: 'FAILED',
+        diagnostics: [],
+        screenshotBase64: null,
+        loadTimeMs: 0,
+        timestamp: new Date().toISOString(),
+      };
+    }
+    const diagCount = scanResult?.diagnostics.length || 0;
+    console.log(`  \u2713 Step 3: Scan URL \u2014 status=${scanResult?.status}, diagnostics=${diagCount}`);
     passed++;
   } catch (err) {
     console.error(`  \u2717 Step 3: Scan URL \u2014 ${err}`);

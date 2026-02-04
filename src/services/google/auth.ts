@@ -30,6 +30,14 @@ export class GoogleAuthService {
     const existing = await this.tokenStore.loadTokens();
 
     if (existing) {
+      // Check if stored token has all required scopes
+      const missingScopes = this.checkMissingScopes(existing.scope);
+      if (missingScopes.length > 0) {
+        console.warn('[GoogleAuth] Token missing required scopes:', missingScopes);
+        console.warn('[GoogleAuth] Starting re-authentication to acquire missing scopes');
+        return this.startOAuthFlow();
+      }
+
       // 2. If still valid, reuse
       if (existing.expiry_date > Date.now()) {
         this.oauth2Client.setCredentials(existing);
@@ -49,6 +57,13 @@ export class GoogleAuthService {
 
     // 4. Start new OAuth flow
     return this.startOAuthFlow();
+  }
+
+  private checkMissingScopes(tokenScope: string): string[] {
+    if (!tokenScope) return GOOGLE_SCOPES;
+
+    const grantedScopes = tokenScope.split(' ');
+    return GOOGLE_SCOPES.filter(required => !grantedScopes.includes(required));
   }
 
   async getAuthenticatedClient(): Promise<OAuth2Client> {
