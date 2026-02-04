@@ -1,3 +1,108 @@
+/* ============================================
+   DESIGN SYSTEM TOKENS
+   ============================================ */
+:root {
+  /* === Typography === */
+  --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    Oxygen, Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, monospace;
+
+  /* Font Sizes */
+  --text-xs: 0.75rem;     /* 12px */
+  --text-sm: 0.875rem;    /* 14px */
+  --text-base: 1rem;      /* 16px */
+  --text-lg: 1.125rem;    /* 18px */
+  --text-xl: 1.25rem;     /* 20px */
+  --text-2xl: 1.5rem;     /* 24px */
+
+  /* Font Weights */
+  --font-normal: 400;
+  --font-medium: 500;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* === Background Colors (elevation hierarchy) === */
+  --bg-base: #0a0a0b;           /* App shell - deepest */
+  --bg-surface: #111113;        /* Sidebar, main area */
+  --bg-elevated: #18181b;       /* Cards */
+  --bg-elevated-hover: #1f1f23; /* Hover states */
+  --bg-input: #0f0f11;          /* Form inputs */
+  --bg-dropdown: #1a1a1e;       /* Dropdown menus */
+  --bg-dropdown-hover: #252529; /* Dropdown item hover */
+
+  /* === Border Colors === */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.10);
+  --border-hover: rgba(255, 255, 255, 0.15);
+  --border-focus: #3b82f6;
+
+  /* === Text Colors === */
+  --text-primary: #fafafa;
+  --text-secondary: #a1a1aa;
+  --text-tertiary: #71717a;
+  --text-placeholder: #52525b;
+
+  /* === Accent Colors (Trust-conveying blue) === */
+  --accent-primary: #3b82f6;
+  --accent-primary-hover: #2563eb;
+  --accent-primary-subtle: rgba(59, 130, 246, 0.15);
+  --accent-primary-ghost: rgba(59, 130, 246, 0.08);
+
+  /* === Semantic Colors === */
+  --success: #22c55e;
+  --success-subtle: rgba(34, 197, 94, 0.15);
+  --success-text: #4ade80;
+
+  --warning: #f59e0b;
+  --warning-subtle: rgba(245, 158, 11, 0.15);
+  --warning-text: #fbbf24;
+
+  --danger: #ef4444;
+  --danger-subtle: rgba(239, 68, 68, 0.15);
+  --danger-text: #f87171;
+
+  --info: #3b82f6;
+  --info-subtle: rgba(59, 130, 246, 0.15);
+  --info-text: #60a5fa;
+
+  /* === Spacing Scale (4px base) === */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+  --space-9: 36px;
+  --space-10: 40px;
+
+  /* === Border Radius === */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 9999px;
+
+  /* === Shadows === */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 8px rgba(0, 0, 0, 0.2), 0 0 0 1px rgba(255, 255, 255, 0.03) inset;
+  --shadow-dropdown: 0 4px 6px rgba(0, 0, 0, 0.3), 0 10px 20px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+  --shadow-glow-accent: 0 0 12px rgba(59, 130, 246, 0.25);
+  --shadow-glow-success: 0 0 8px rgba(34, 197, 94, 0.3);
+  --shadow-glow-danger: 0 0 8px rgba(239, 68, 68, 0.3);
+
+  /* === Transitions === */
+  --transition-fast: 0.1s ease;
+  --transition-base: 0.15s ease;
+  --transition-slow: 0.2s ease;
+}
+
+/* ============================================
+   BASE RESET
+   ============================================ */
 * {
   margin: 0;
   padding: 0;
@@ -6,10 +111,9 @@
 
 html, body, #root {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen,
-    Ubuntu, Cantarell, 'Fira Sans', 'Droid Sans', 'Helvetica Neue', sans-serif;
-  color: #e0e0e0;
-  background: #0f0f23;
+  font-family: var(--font-primary);
+  color: var(--text-primary);
+  background: var(--bg-base);
 }
 
 .app {
@@ -21,21 +125,21 @@ html, body, #root {
 .sidebar {
   width: 220px;
   min-width: 220px;
-  background: #1a1a2e;
+  background: var(--bg-surface);
   display: flex;
   flex-direction: column;
-  border-right: 1px solid #2a2a4a;
+  border-right: 1px solid var(--border-subtle);
 }
 
 .sidebar-header {
-  padding: 20px 16px;
-  border-bottom: 1px solid #2a2a4a;
+  padding: var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .sidebar-header h1 {
-  font-size: 15px;
-  font-weight: 600;
-  color: #ffffff;
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
   letter-spacing: 0.3px;
 }
 
@@ -43,46 +147,47 @@ html, body, #root {
   list-style: none;
   display: flex;
   flex-direction: column;
-  padding: 8px;
-  gap: 2px;
+  padding: var(--space-2);
+  gap: var(--space-1);
 }
 
 .nav-link {
   display: flex;
   flex-direction: row;
   align-items: center;
-  padding: 12px 16px;
-  color: #9ca3af;
+  padding: var(--space-3) var(--space-4);
+  color: var(--text-tertiary);
   text-decoration: none;
-  border-radius: 8px;
-  transition: background-color 0.15s ease, color 0.15s ease;
-  font-size: 14px;
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-base);
+  font-size: var(--text-sm);
 }
 
 .nav-link:hover {
-  background: #252542;
-  color: #d1d5db;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
 }
 
 .nav-link--active {
-  background: #252542;
-  color: #ffffff;
+  background: var(--accent-primary-subtle);
+  color: var(--text-primary);
+  border-left: 3px solid var(--accent-primary);
 }
 
 .nav-icon {
-  margin-right: 10px;
-  font-size: 16px;
+  margin-right: var(--space-2);
+  font-size: var(--text-base);
 }
 
 .nav-label {
-  font-weight: 500;
+  font-weight: var(--font-medium);
 }
 
 .content {
   flex: 1;
-  padding: 24px;
+  padding: var(--space-6);
   overflow-y: auto;
-  background: #0f0f23;
+  background: var(--bg-base);
 }
 
 .page {
@@ -90,15 +195,15 @@ html, body, #root {
 }
 
 .page h2 {
-  font-size: 24px;
-  font-weight: 600;
-  color: #ffffff;
-  margin-bottom: 8px;
+  font-size: var(--text-2xl);
+  font-weight: var(--font-semibold);
+  color: var(--text-primary);
+  margin-bottom: var(--space-2);
 }
 
 .page p {
-  color: #9ca3af;
-  font-size: 14px;
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
   line-height: 1.6;
 }
 
@@ -108,14 +213,119 @@ html, body, #root {
 }
 
 ::-webkit-scrollbar-track {
-  background: #0f0f23;
+  background: var(--bg-base);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #374151;
-  border-radius: 4px;
+  background: var(--border-default);
+  border-radius: var(--radius-sm);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #4b5563;
+  background: var(--border-hover);
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Tablet and smaller desktops */
+@media (max-width: 1024px) {
+  .content {
+    padding: var(--space-5);
+  }
+
+  .page {
+    max-width: 100%;
+  }
+}
+
+/* Tablets and large phones */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 200px;
+    min-width: 200px;
+  }
+
+  .content {
+    padding: var(--space-4);
+  }
+
+  .page h2 {
+    font-size: var(--text-xl);
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 640px) {
+  .app {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    min-width: 100%;
+    flex-direction: row;
+    border-right: none;
+    border-bottom: 1px solid var(--border-subtle);
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 100;
+    height: auto;
+  }
+
+  .sidebar-header {
+    display: none;
+  }
+
+  .nav-list {
+    flex-direction: row;
+    justify-content: space-around;
+    padding: var(--space-2) var(--space-1);
+    gap: 0;
+    width: 100%;
+  }
+
+  .nav-link {
+    flex-direction: column;
+    padding: var(--space-2);
+    font-size: var(--text-xs);
+    border-radius: var(--radius-md);
+    border-left: none;
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .nav-link--active {
+    border-left: none;
+    border-bottom: 2px solid var(--accent-primary);
+  }
+
+  .nav-icon {
+    margin-right: 0;
+    margin-bottom: var(--space-1);
+    font-size: var(--text-lg);
+  }
+
+  .nav-label {
+    font-size: 10px;
+  }
+
+  .content {
+    padding: var(--space-4);
+    padding-bottom: 80px; /* Space for bottom nav */
+    margin-bottom: 0;
+  }
+
+  .page h2 {
+    font-size: var(--text-lg);
+    margin-bottom: var(--space-1);
+  }
+
+  .page p {
+    font-size: var(--text-xs);
+  }
 }

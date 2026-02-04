@@ -1,34 +1,35 @@
 .schedule-page {
   padding: 24px;
-  background: #0f0f23;
+  background: var(--bg-base);
   min-height: 100vh;
-  color: #e0e0e0;
+  color: var(--text-primary);
 }
 
 .schedule-page h2 {
   margin: 0 0 8px 0;
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 1.5rem;
 }
 
 .schedule-page .page-subtitle {
-  color: #888;
+  color: var(--text-tertiary);
   margin: 0 0 24px 0;
   font-size: 0.9rem;
 }
 
 /* Schedule Configuration */
 .schedule-config {
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
   padding: 16px 20px;
   margin-bottom: 16px;
+  box-shadow: var(--shadow-card);
 }
 
 .schedule-config h3 {
   margin: 0 0 14px 0;
   font-size: 0.95rem;
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .config-grid {
@@ -41,17 +42,17 @@
 .config-field label {
   display: block;
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-tertiary);
   text-transform: uppercase;
   letter-spacing: 0.3px;
   margin-bottom: 6px;
 }
 
 .config-error {
-  background: #e9456022;
-  color: #e94560;
+  background: var(--danger-subtle);
+  color: var(--danger-text);
   padding: 8px 14px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   font-size: 0.82rem;
   margin-bottom: 12px;
 }
@@ -59,10 +60,10 @@
 .config-field input[type="date"] {
   width: 100%;
   padding: 8px 10px;
-  background: #16213e;
-  border: 1px solid #2c2c54;
-  border-radius: 6px;
-  color: #e0e0e0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
   font-size: 0.85rem;
   outline: none;
   color-scheme: dark;
@@ -74,17 +75,18 @@
 }
 
 .config-field input[type="date"]:focus {
-  border-color: #3498db;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-ghost);
 }
 
 .config-field select,
 .config-field input[type="number"] {
   width: 100%;
   padding: 8px 10px;
-  background: #16213e;
-  border: 1px solid #2c2c54;
-  border-radius: 6px;
-  color: #e0e0e0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
   font-size: 0.85rem;
   outline: none;
 }
@@ -97,7 +99,8 @@
 
 .config-field select:focus,
 .config-field input:focus {
-  border-color: #3498db;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-ghost);
 }
 
 .radio-group {
@@ -111,12 +114,12 @@
   align-items: center;
   gap: 6px;
   font-size: 0.82rem;
-  color: #ccc;
+  color: var(--text-secondary);
   cursor: pointer;
 }
 
 .radio-label input[type="radio"] {
-  accent-color: #3498db;
+  accent-color: var(--accent-primary);
 }
 
 .radio-label input[type="radio"]:disabled {
@@ -130,15 +133,15 @@
   align-items: center;
   gap: 12px;
   padding: 16px 20px;
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
   margin-bottom: 20px;
 }
 
 .schedule-controls .btn {
   padding: 8px 20px;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   font-size: 0.85rem;
   font-weight: 600;
   cursor: pointer;
@@ -151,23 +154,23 @@
 }
 
 .schedule-controls .btn-start {
-  background: #27ae60;
+  background: var(--success);
   color: #fff;
 }
 
 .schedule-controls .btn-stop {
-  background: #e94560;
+  background: var(--danger);
   color: #fff;
 }
 
 .schedule-controls .btn-refresh {
-  background: #2c2c54;
-  color: #e0e0e0;
+  background: var(--bg-elevated-hover);
+  color: var(--text-primary);
   margin-left: auto;
 }
 
 .schedule-controls .btn-refresh:hover {
-  background: #3c3c6a;
+  background: var(--bg-surface);
 }
 
 .status-indicator {
@@ -175,7 +178,7 @@
   align-items: center;
   gap: 8px;
   font-size: 0.85rem;
-  color: #ccc;
+  color: var(--text-secondary);
 }
 
 .status-dot {
@@ -186,16 +189,16 @@
 }
 
 .status-dot.idle {
-  background: #666;
+  background: var(--text-tertiary);
 }
 
 .status-dot.running {
-  background: #27ae60;
+  background: var(--success);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 .status-dot.stopped {
-  background: #e94560;
+  background: var(--danger);
 }
 
 @keyframes pulse {
@@ -205,10 +208,10 @@
 
 .send-interval {
   font-size: 0.8rem;
-  color: #888;
+  color: var(--text-tertiary);
   margin-left: 8px;
   padding-left: 12px;
-  border-left: 1px solid #333;
+  border-left: 1px solid var(--border-subtle);
 }
 
 /* Stats Panel */
@@ -220,10 +223,11 @@
 
 .stat-card {
   flex: 1;
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
   padding: 16px 20px;
   text-align: center;
+  box-shadow: var(--shadow-card);
 }
 
 .stat-card .stat-value {
@@ -235,31 +239,32 @@
 .stat-card .stat-label {
   font-size: 0.75rem;
   text-transform: uppercase;
-  color: #888;
+  color: var(--text-tertiary);
   letter-spacing: 0.5px;
 }
 
-.stat-card.total .stat-value { color: #e0e0e0; }
-.stat-card.sent .stat-value { color: #27ae60; }
-.stat-card.pending .stat-value { color: #f1c40f; }
-.stat-card.failed .stat-value { color: #e94560; }
+.stat-card.total .stat-value { color: var(--text-primary); }
+.stat-card.sent .stat-value { color: var(--success-text); }
+.stat-card.pending .stat-value { color: var(--warning-text); }
+.stat-card.failed .stat-value { color: var(--danger-text); }
 
 /* Email Queue Table */
 .queue-table-wrapper {
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
   overflow: hidden;
   margin-bottom: 20px;
   max-height: 400px;
   overflow-y: auto;
+  box-shadow: var(--shadow-card);
 }
 
 .queue-table-wrapper h3 {
   margin: 0;
   padding: 14px 20px;
   font-size: 0.95rem;
-  color: #fff;
-  border-bottom: 1px solid #2c2c54;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .queue-table {
@@ -275,10 +280,10 @@
 }
 
 .queue-table th {
-  background: #16213e;
+  background: var(--bg-surface);
   padding: 10px 12px;
   text-align: left;
-  color: #aaa;
+  color: var(--text-tertiary);
   font-weight: 600;
   font-size: 0.75rem;
   text-transform: uppercase;
@@ -287,8 +292,8 @@
 
 .queue-table td {
   padding: 8px 12px;
-  border-bottom: 1px solid #1f1f3a;
-  color: #ccc;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -296,15 +301,15 @@
 }
 
 .queue-table tbody tr:nth-child(even) {
-  background: #151530;
+  background: var(--bg-input);
 }
 
 .queue-table tbody tr:nth-child(odd) {
-  background: #1a1a2e;
+  background: var(--bg-elevated);
 }
 
 .queue-table tbody tr:hover {
-  background: #22224a;
+  background: var(--bg-elevated-hover);
 }
 
 /* Status Badges */
@@ -317,15 +322,15 @@
   text-transform: uppercase;
 }
 
-.email-badge.draft     { background: #f1c40f22; color: #f1c40f; }
-.email-badge.scheduled { background: #3498db22; color: #3498db; }
-.email-badge.sent      { background: #27ae6022; color: #27ae60; }
-.email-badge.failed    { background: #e9456022; color: #e94560; }
+.email-badge.draft     { background: var(--warning-subtle); color: var(--warning-text); }
+.email-badge.scheduled { background: var(--info-subtle); color: var(--info-text); }
+.email-badge.sent      { background: var(--success-subtle); color: var(--success-text); }
+.email-badge.failed    { background: var(--danger-subtle); color: var(--danger-text); }
 
 /* Activity Log */
 .activity-log {
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-xl);
   overflow: hidden;
 }
 
@@ -333,58 +338,58 @@
   margin: 0;
   padding: 14px 20px;
   font-size: 0.95rem;
-  color: #fff;
-  border-bottom: 1px solid #2c2c54;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .activity-log-entries {
   max-height: 200px;
   overflow-y: auto;
   padding: 12px 20px;
-  font-family: 'Fira Code', 'Cascadia Code', 'Consolas', monospace;
+  font-family: var(--font-mono);
   font-size: 0.78rem;
   line-height: 1.7;
 }
 
 .log-entry {
-  color: #aaa;
+  color: var(--text-secondary);
 }
 
 .log-entry .log-time {
-  color: #666;
+  color: var(--text-tertiary);
   margin-right: 10px;
 }
 
 .log-entry .log-msg {
-  color: #ccc;
+  color: var(--text-secondary);
 }
 
 .empty-state {
   text-align: center;
   padding: 40px;
-  color: #555;
+  color: var(--text-tertiary);
   font-size: 0.85rem;
 }
 
 .error-banner {
-  background: #e9456022;
-  color: #e94560;
+  background: var(--danger-subtle);
+  color: var(--danger-text);
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   margin-bottom: 16px;
   font-size: 0.85rem;
 }
 
 .sync-message {
   padding: 10px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   margin-bottom: 16px;
   font-size: 0.85rem;
 }
 
 .sync-message.success {
-  background: #27ae6022;
-  color: #27ae60;
+  background: var(--success-subtle);
+  color: var(--success-text);
 }
 
 /* Interval Range Inputs */
@@ -406,23 +411,24 @@
 
 .interval-input-group .interval-label {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-tertiary);
   min-width: 28px;
 }
 
 .interval-input-group input[type="number"] {
   flex: 1;
   padding: 8px 10px;
-  background: #16213e;
-  border: 1px solid #2c2c54;
-  border-radius: 6px;
-  color: #e0e0e0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
   font-size: 0.85rem;
   outline: none;
 }
 
 .interval-input-group input[type="number"]:focus {
-  border-color: #3498db;
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px var(--accent-primary-ghost);
 }
 
 .interval-input-group input[type="number"]:disabled {
@@ -445,31 +451,242 @@
 }
 
 .tz-row--local {
-  color: #ccc;
+  color: var(--text-secondary);
 }
 
 .tz-row--lead {
-  color: #888;
+  color: var(--text-tertiary);
   font-size: 0.75rem;
   margin-top: 2px;
 }
 
 .tz-label {
   font-weight: 500;
-  color: #666;
+  color: var(--text-tertiary);
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.2px;
 }
 
 .tz-row--local .tz-label {
-  color: #888;
+  color: var(--text-tertiary);
 }
 
 .tz-row--lead .tz-label {
-  color: #555;
+  color: var(--text-tertiary);
 }
 
 .tz-value {
   color: inherit;
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+/* Tablets and smaller desktops */
+@media (max-width: 1024px) {
+  .config-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .config-field--interval-range {
+    grid-column: span 3;
+  }
+}
+
+/* Tablets and large phones */
+@media (max-width: 768px) {
+  .schedule-page {
+    padding: 16px;
+    padding-bottom: 100px;
+  }
+
+  .schedule-page h2 {
+    font-size: var(--text-xl);
+  }
+
+  .config-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .config-field--interval-range {
+    grid-column: span 2;
+  }
+
+  .config-field label {
+    font-size: var(--text-xs);
+  }
+
+  .schedule-stats {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .stat-card {
+    flex: 1 1 calc(50% - 6px);
+    min-width: 120px;
+  }
+
+  .schedule-controls {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .schedule-controls .btn-refresh {
+    margin-left: 0;
+  }
+
+  .queue-table-wrapper {
+    max-height: 300px;
+  }
+
+  .queue-table {
+    font-size: var(--text-xs);
+  }
+
+  .queue-table th,
+  .queue-table td {
+    padding: 8px 10px;
+  }
+
+  .dual-timezone-cell {
+    min-width: 130px;
+    max-width: 130px;
+  }
+
+  .interval-range-inputs {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .activity-log-entries {
+    font-size: var(--text-xs);
+  }
+}
+
+/* Mobile phones */
+@media (max-width: 480px) {
+  .schedule-page {
+    padding: 12px;
+    padding-bottom: 120px;
+  }
+
+  .schedule-page h2 {
+    font-size: var(--text-lg);
+  }
+
+  .page-subtitle {
+    font-size: var(--text-xs);
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .config-field--interval-range {
+    grid-column: span 1;
+  }
+
+  .schedule-config {
+    padding: 16px;
+  }
+
+  .schedule-config h3 {
+    font-size: var(--text-base);
+  }
+
+  .schedule-stats {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .stat-card {
+    flex: none;
+    width: 100%;
+    padding: 12px;
+  }
+
+  .stat-card .stat-value {
+    font-size: var(--text-xl);
+  }
+
+  .stat-card .stat-label {
+    font-size: var(--text-xs);
+  }
+
+  .schedule-controls {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .schedule-controls button {
+    width: 100%;
+  }
+
+  .status-indicator {
+    justify-content: center;
+  }
+
+  .send-interval {
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+    padding-left: 0;
+    padding-top: 8px;
+    margin-top: 8px;
+  }
+
+  .queue-table-wrapper {
+    max-height: 250px;
+  }
+
+  .queue-table th,
+  .queue-table td {
+    padding: 6px 8px;
+    font-size: 11px;
+  }
+
+  .dual-timezone-cell {
+    min-width: 100px;
+    max-width: 100px;
+  }
+
+  .email-badge {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+
+  .interval-range-inputs {
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .interval-input-group {
+    width: 100%;
+  }
+
+  .activity-log {
+    padding: 12px;
+  }
+
+  .activity-log h3 {
+    font-size: var(--text-base);
+    padding-bottom: 8px;
+  }
+
+  .log-entry {
+    flex-direction: column;
+    gap: 2px;
+    align-items: flex-start;
+  }
+
+  .log-time {
+    font-size: 10px;
+  }
+
+  .log-msg {
+    font-size: var(--text-xs);
+  }
 }
