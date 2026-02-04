@@ -110,31 +110,40 @@ export class EmailGenerator {
 
   private generateFallback(context: PromptContext): GeneratedEmail {
     const firstName = context.contactName.split(' ')[0];
+    const subject = `${context.companyName}'s website speed`;
+
+    // Extract domain from URL
+    let domain = context.websiteUrl;
+    try {
+      const url = new URL(context.websiteUrl.startsWith('http') ? context.websiteUrl : `https://${context.websiteUrl}`);
+      domain = url.hostname.replace(/^www\./, '');
+    } catch {
+      // Keep original if URL parsing fails
+    }
 
     // Singular/plural for issues
     const issueCount = context.annotationLabels.length || context.problemCount || 1;
     const issueWord = issueCount === 1 ? 'issue' : 'issues';
 
-    // Build subject based on available hook
-    const subject = context.introHook
-      ? `${context.companyName}'s ${context.introHook.metricName.toLowerCase()}`
-      : `${context.companyName}'s website`;
+    // Get conversion loss percentage based on load time
+    const getConversionLoss = (seconds: number): string => {
+      if (seconds <= 3) return "that's likely costing you 10-15% of your conversions before visitors even see your offer";
+      if (seconds <= 5) return "that's likely costing you 20-25% of your conversions before visitors even see your offer";
+      if (seconds <= 8) return "that's likely costing you 30-35% of your conversions before visitors even see your offer";
+      if (seconds <= 12) return "that's likely costing you 40-50% of your conversions before visitors even see your offer";
+      return "that's likely costing you 50%+ of your conversions before visitors even see your offer";
+    };
 
-    // Build intro based on available hook
-    let introText: string;
-    if (context.introHook) {
-      // Use the dynamic hook
-      introText = `${context.introHook.observation}, ${context.introHook.impact}.
-
-Your hero section has some ${issueWord} I've flagged below:`;
-    } else {
-      // No hook available, skip intro and go straight to hero
-      introText = `Your hero section has some ${issueWord} I've flagged below:`;
-    }
+    // Build body with load time and conversion impact
+    const loadTimeText = context.loadTimeSeconds
+      ? `Your homepage takes ${context.loadTimeSeconds} seconds to load, ${getConversionLoss(context.loadTimeSeconds)}.`
+      : `I found ${context.problemCount} area${context.problemCount !== 1 ? 's' : ''} that could be improved.`;
 
     const body = `Hi ${firstName},
 
-${introText}
+${loadTimeText}
+
+Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.`;
