@@ -299,12 +299,6 @@ export default function DraftsPage() {
               )}
 
               <div className="draft-card-actions">
-                <button
-                  className="btn-card-reject"
-                  onClick={() => setDraftStatus(draft.id, 'rejected')}
-                >
-                  Reject
-                </button>
                 {editingId !== draft.id && (
                   <button onClick={() => startEdit(draft)}>Edit</button>
                 )}
