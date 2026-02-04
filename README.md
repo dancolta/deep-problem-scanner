@@ -132,6 +132,124 @@ Gemini Vision analyzes hero sections for:
 - **Trust Signals** - Missing social proof, logos, or testimonials
 - **Hero Image** - Generic stock photos or missing visual content
 
+## Email Generation
+
+### Prompt Structure
+
+The AI email generation uses a structured prompt with the following components:
+
+```
+RECIPIENT:
+- First name, Company, Domain
+
+SCAN FINDINGS:
+- Intro metric (poorest PageSpeed score below threshold)
+- Number of issues found
+- Most critical issue
+- Full diagnostics summary
+
+EMAIL PATTERN:
+Subject: [3-7 words, reference their main problem]
+
+Hi {{firstName}},
+
+{{introHook}}
+
+[TRANSITION_SENTENCE]
+[IMAGE]
+
+{{cta}}
+```
+
+### Subject Line Formulas
+
+Pick one based on available data:
+
+**Formula 1: Problem + Metric** (when you have specific numbers)
+```
+your site takes 4.3 seconds to load
+homepage loads in 4.3 seconds
+homepage is 4.3 seconds slow
+```
+
+**Formula 2: Problem + Impact** (emphasize business cost)
+```
+your homepage might be losing conversions
+losing 25% of visitors before they convert
+hero section could be costing you leads
+```
+
+**Formula 3: Just the Metric** (maximum curiosity)
+```
+4.3 seconds
+25% visitor drop
+47 http requests
+```
+
+**Formula 4: Casual Observation** (fallback when no metric)
+```
+noticed a few issues on your site
+quick thing about your homepage
+saw something on your site
+```
+
+### Subject Line Rules
+
+- ALL LOWERCASE (no caps except proper nouns)
+- NO PUNCTUATION (no periods, exclamation marks, question marks)
+- 3-7 words maximum
+- NO clickbait ("you won't believe", "shocking")
+- NO salesy words ("free", "opportunity", "limited time")
+
+### Body Rules
+
+| # | Rule |
+|---|------|
+| 1 | Body: 75-100 words max (under 80 ideal). Be concise. |
+| 2 | First sentence MUST follow the intro hook pattern provided |
+| 3 | First sentence MUST include the impact statement if a metric is provided |
+| 4 | NO em dashes. Use commas instead. |
+| 5 | Second paragraph: Output exactly "[TRANSITION_SENTENCE]" placeholder |
+| 6 | CTA MUST match the provided CTA exactly |
+| 7 | NO signature - Gmail will add it automatically |
+| 8 | Tone: Direct, expert, helpful |
+| 9 | NO: ROI claims, pricing, buzzwords, "hope this finds you well" |
+| 10 | NEVER use "hero" or "hero section" in the OPENING sentence |
+
+### Spacing Rules
+
+- After `[TRANSITION_SENTENCE]` → single newline → `[IMAGE]` (NO blank line)
+- After `[IMAGE]` → blank line → CTA (one blank line after image)
+
+### CTA Rotation
+
+Emails alternate between two CTAs based on email index:
+
+| Email # | CTA |
+|---------|-----|
+| 1st, 3rd, 5th... | "Want me to walk you through the rest of the findings? Takes 15 minutes." |
+| 2nd, 4th, 6th... | "Worth a 15-min call to see if the other issues are worth fixing?" |
+
+### Buzzword Blacklist
+
+The following words are automatically filtered from the opening paragraph:
+
+| Pattern | Replacement |
+|---------|-------------|
+| "hero section" | "above-the-fold area" |
+| "hero" | "header" |
+
+### Industry Thresholds
+
+PageSpeed metrics below these thresholds are flagged in outreach:
+
+| Metric | Threshold |
+|--------|-----------|
+| Performance Score | 80 |
+| Accessibility Score | 80 |
+| SEO Score | 80 |
+| Best Practices Score | 80 |
+
 ## License
 
 UNLICENSED - Private repository

@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PromptContext, GeneratedEmail, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
-import { buildEmailPrompt, countWords, truncateToWordLimit } from './prompt-template';
+import { buildEmailPrompt, countWords, truncateToWordLimit, getTransitionSentence, BUZZWORD_BLACKLIST, CTA_OPTIONS } from './prompt-template';
 
 export class EmailGenerator {
   private genAI: GoogleGenerativeAI;
@@ -16,10 +16,11 @@ export class EmailGenerator {
   async generateEmail(
     context: PromptContext,
     options?: Partial<EmailGenerationOptions>,
-    customTemplate?: string
+    customTemplate?: string,
+    emailIndex: number = 0
   ): Promise<GeneratedEmail> {
     const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
-    const prompt = buildEmailPrompt(context, opts, customTemplate);
+    const prompt = buildEmailPrompt(context, opts, customTemplate, emailIndex);
 
     // Attempt 1: Call Gemini
     let parsed = await this.callAndParse(prompt);
@@ -33,7 +34,7 @@ export class EmailGenerator {
     // Attempt 3: Fallback template
     if (!parsed) {
       console.error('[EmailGenerator] AI generation failed, using fallback template');
-      return this.generateFallback(context);
+      return this.generateFallback(context, emailIndex);
     }
 
     // Validate and enforce limits
@@ -44,11 +45,16 @@ export class EmailGenerator {
 
     let body = parsed.body.trim();
 
+    // Replace [TRANSITION_SENTENCE] with the actual second paragraph
+    // This is done AFTER AI generation to hide "hero" from the AI
+    const transitionSentence = getTransitionSentence(context);
+    body = body.replace(/\[TRANSITION_SENTENCE\]/g, transitionSentence);
+
     // Normalize spacing around [IMAGE]: no blank line before, one blank line after
     body = this.normalizeImageSpacing(body);
 
-    // Fix: Remove "hero" from first paragraph (post-processing enforcement)
-    body = this.removeHeroFromFirstParagraph(body);
+    // Apply buzzword blacklist to filter forbidden words/phrases
+    body = this.applyBuzzwordBlacklist(body);
 
     const wordCount = countWords(body);
     if (wordCount > opts.maxBodyWords) {
@@ -97,40 +103,34 @@ export class EmailGenerator {
   }
 
   /**
-   * Remove any mention of "hero" from the first paragraph.
-   * This is a post-processing enforcement since the AI sometimes ignores the rule.
+   * Apply buzzword blacklist to filter forbidden words/phrases from the opening paragraph only.
+   * The transition sentence (second paragraph with "hero section") is preserved.
+   * Uses the centralized BUZZWORD_BLACKLIST for consistent filtering.
    */
-  private removeHeroFromFirstParagraph(body: string): string {
-    // Split into paragraphs
+  private applyBuzzwordBlacklist(body: string): string {
+    // Split into paragraphs: [0] = "Hi Name,", [1] = intro, [2+] = rest
     const paragraphs = body.split(/\n\n+/);
 
     if (paragraphs.length < 2) return body;
 
-    // First paragraph is "Hi Name," - second is the intro we need to fix
+    // Only apply blacklist to the intro paragraph (index 1)
     let introParagraph = paragraphs[1];
 
-    // Check if "hero" appears in the intro paragraph
-    if (introParagraph.toLowerCase().includes('hero')) {
-      // Replace common patterns that mention hero
-      introParagraph = introParagraph
-        .replace(/\s*in your hero section/gi, '')
-        .replace(/\s*on your hero section/gi, '')
-        .replace(/\s*with your hero section/gi, '')
-        .replace(/\s*,?\s*including your hero section/gi, '')
-        .replace(/\s*,?\s*especially in your hero section/gi, '')
-        .replace(/\s*,?\s*particularly in your hero section/gi, '')
-        .replace(/\s*hero section\s*/gi, ' ')
-        .replace(/\s*hero\s*/gi, ' ')
-        .replace(/\s{2,}/g, ' ')  // Clean up double spaces
-        .replace(/\s+\./g, '.')   // Clean up space before period
-        .replace(/\s+,/g, ',')    // Clean up space before comma
-        .trim();
-
-      paragraphs[1] = introParagraph;
-      return paragraphs.join('\n\n');
+    for (const { pattern, replacement } of BUZZWORD_BLACKLIST) {
+      introParagraph = introParagraph.replace(pattern, replacement);
     }
 
-    return body;
+    // Clean up any artifacts from replacements
+    introParagraph = introParagraph
+      .replace(/\s{2,}/g, ' ')      // multiple spaces → single space
+      .replace(/\s+\./g, '.')        // space before period
+      .replace(/\s+,/g, ',')         // space before comma
+      .replace(/,\s*,/g, ',')        // double commas
+      .replace(/\.\s*\./g, '.')      // double periods
+      .trim();
+
+    paragraphs[1] = introParagraph;
+    return paragraphs.join('\n\n');
   }
 
   /**
@@ -148,8 +148,9 @@ export class EmailGenerator {
     return body.trim();
   }
 
-  private generateFallback(context: PromptContext): GeneratedEmail {
+  private generateFallback(context: PromptContext, emailIndex: number = 0): GeneratedEmail {
     const firstName = context.contactName.split(' ')[0];
+    const cta = CTA_OPTIONS[emailIndex % CTA_OPTIONS.length];
 
     // Singular/plural for issues
     const issueCount = context.annotationLabels.length || context.problemCount || 1;
@@ -210,7 +211,7 @@ ${introText}
 Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]
 
-Want me to walk you through the rest of the findings? Takes 15 minutes.`;
+${cta}`;
 
     return {
       subject,
@@ -230,12 +231,12 @@ Want me to walk you through the rest of the findings? Takes 15 minutes.`;
 
     for (let i = 0; i < contexts.length; i++) {
       try {
-        const email = await this.generateEmail(contexts[i], options, customTemplate);
+        const email = await this.generateEmail(contexts[i], options, customTemplate, i);
         results.push(email);
         console.log(`[EmailGenerator] Generated ${i + 1}/${contexts.length}: ${email.subject}`);
       } catch (error) {
         console.error(`[EmailGenerator] Failed for ${contexts[i].companyName}:`, error);
-        results.push(this.generateFallback(contexts[i]));
+        results.push(this.generateFallback(contexts[i], i));
       }
 
       // Rate limit delay between calls (200ms)

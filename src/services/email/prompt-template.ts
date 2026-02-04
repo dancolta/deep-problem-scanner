@@ -1,14 +1,48 @@
 import { DiagnosticResult } from '../scanner/types';
 import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
 
-export const DEFAULT_EMAIL_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
+/**
+ * Buzzword blacklist - words/phrases that should never appear in generated emails.
+ * Each entry has a regex pattern and its replacement.
+ * Order matters: more specific patterns (e.g., "hero section") should come before general ones (e.g., "hero").
+ */
+export const BUZZWORD_BLACKLIST: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /\bhero\s+section\b/gi, replacement: 'above-the-fold area' },
+  { pattern: /\bhero\b/gi, replacement: 'header' },
+  // Add more blacklisted buzzwords here as needed:
+  // { pattern: /\bsynergy\b/gi, replacement: '' },
+  // { pattern: /\bleverage\b/gi, replacement: 'use' },
+];
 
-⚠️ STRICT CONSTRAINT - WILL BE VALIDATED:
-The word "hero" is FORBIDDEN in the first paragraph. If your first paragraph contains "hero", the email will be rejected.
-The word "hero" may ONLY appear in the second paragraph (the {{secondParagraph}} line).
+/**
+ * CTA options for rotation - alternates between emails
+ */
+export const CTA_OPTIONS = [
+  "Want me to walk you through the rest of the findings? Takes 15 minutes.",
+  "Worth a 15-min call to see if the other issues are worth fixing?"
+];
 
-❌ WRONG: "I analyzed your site and spotted conversion gaps in your hero section..."
-✅ CORRECT: "I analyzed your site and spotted some conversion gaps that could be impacting your results..."
+/**
+ * User-editable email template (simplified version for UI)
+ * This is what users see and can customize in the Setup page.
+ * The core prompt logic wraps this template with AI instructions.
+ */
+export const USER_EMAIL_TEMPLATE = `Subject: [3-7 words, reference their main problem]
+
+Hi {{firstName}},
+
+{{introHook}}
+
+[TRANSITION_SENTENCE]
+[IMAGE]
+
+{{cta}}`;
+
+/**
+ * Core AI prompt template - contains instructions for the AI.
+ * The {{emailPattern}} placeholder is replaced with the user's custom template.
+ */
+export const CORE_PROMPT_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
 
 RECIPIENT:
 - First name: {{firstName}}
@@ -18,7 +52,6 @@ RECIPIENT:
 SCAN FINDINGS:
 - Intro metric: {{introMetric}}
 - Number of issues found: {{issueCount}}
-- Hero section issues: {{heroIssues}}
 - Most critical: {{worstProblem}}
 - Full diagnostics: {{diagnosticsSummary}}
 
@@ -26,16 +59,7 @@ SCAN FINDINGS:
 
 EMAIL PATTERN:
 
-Subject: [3-7 words, reference their main problem]
-
-Hi {{firstName}},
-
-[HOOK: {{introHook}}]
-
-{{secondParagraph}}
-[IMAGE]
-
-Want me to walk you through the rest of the findings? Takes 15 minutes.
+{{emailPattern}}
 
 ---
 
@@ -45,34 +69,58 @@ Hi Sarah,
 
 {{exampleIntro}}
 
-{{secondParagraph}}
+[TRANSITION_SENTENCE]
 [IMAGE]
 
-Want me to walk you through the rest of the findings? Takes 15 minutes.
+{{cta}}
 
 ---
 
-RULES:
+SUBJECT LINE FORMULAS (pick one based on available data):
+
+Formula 1 - Problem + Metric (when you have specific numbers):
+- "your site takes 4.3 seconds to load"
+- "homepage loads in 4.3 seconds"
+
+Formula 2 - Problem + Impact (emphasize business cost):
+- "your homepage might be losing conversions"
+- "hero section could be costing you leads"
+
+Formula 3 - Just the Metric (maximum curiosity):
+- "4.3 seconds"
+- "47 http requests"
+
+Formula 4 - Casual Observation (fallback when no metric):
+- "noticed a few issues on your site"
+- "quick thing about your homepage"
+
+SUBJECT LINE RULES:
+- ALL LOWERCASE (no caps except proper nouns)
+- NO PUNCTUATION (no periods, exclamation marks, question marks)
+- 3-7 words maximum
+- NO clickbait ("you won't believe", "shocking")
+- NO salesy words ("free", "opportunity", "limited time")
+
+BODY RULES:
 1. Body: 75-100 words max (under 80 ideal). Be concise.
-2. Subject: 3-7 words, reference their main problem
-3. First sentence MUST follow the intro hook pattern provided
-4. First sentence MUST include the impact statement if a metric is provided
-5. NO em dashes. Use commas instead.
-6. Second paragraph MUST be exactly: "{{secondParagraph}}"
-7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
-8. NO signature - Gmail will add it automatically
-9. Tone: Direct, expert, helpful
-10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
-11. CRITICAL: The first paragraph must NEVER contain the word "hero". The word "hero" can ONLY appear in the second paragraph.
+2. First sentence MUST follow the intro hook pattern provided
+3. First sentence MUST include the impact statement if a metric is provided
+4. NO em dashes. Use commas instead.
+5. Second paragraph: Output exactly "[TRANSITION_SENTENCE]" - this is a placeholder that will be filled in later.
+6. CTA MUST be exactly: "{{cta}}"
+7. NO signature - Gmail will add it automatically
+8. Tone: Direct, expert, helpful
+9. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
+10. NEVER use "hero" or "hero section" in the OPENING sentence. The transition sentence will mention "hero section" separately, so avoid it in your intro to prevent repetition.
 
 SPACING RULES:
-- After second paragraph → single newline → [IMAGE] (NO blank line between text and image)
+- After [TRANSITION_SENTENCE] → single newline → [IMAGE] (NO blank line between text and image)
 - After [IMAGE] → blank line → CTA (one blank line after image)
 
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\n{{introHook}}\\n\\n{{secondParagraph}}\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi {{firstName}},\\n\\n[Your intro sentence here]\\n\\n[TRANSITION_SENTENCE]\\n[IMAGE]\\n\\n{{cta}}"
 }`;
 
 /**
@@ -85,19 +133,6 @@ const INDUSTRY_THRESHOLDS: Record<string, number> = {
   'SEO Score': 80,              // Below 80 = flag it
   'Best Practices Score': 80,   // Below 80 = flag it
 };
-
-/**
- * Get impact message based on PageSpeed metric and score
- */
-function getMetricImpact(metricName: string, score: number): string {
-  const impacts: Record<string, string> = {
-    'Performance Score': "that's likely costing you conversions before visitors even see your offer",
-    'Accessibility Score': "that's likely turning away visitors who can't easily use your site",
-    'SEO Score': "that's likely hurting your visibility in search results",
-    'Best Practices Score': "that could be affecting your site's security and user trust",
-  };
-  return impacts[metricName] || "that could be affecting your conversions";
-}
 
 /**
  * Get intro sentence for a PageSpeed metric
@@ -137,7 +172,8 @@ function findPoorestPoorMetric(diagnostics: DiagnosticResult[]): { name: string;
 export function buildEmailPrompt(
   context: PromptContext,
   options?: Partial<EmailGenerationOptions>,
-  customTemplate?: string
+  customTemplate?: string,
+  emailIndex: number = 0
 ): string {
   const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
   const firstName = context.contactName.split(' ')[0];
@@ -183,25 +219,31 @@ export function buildEmailPrompt(
   let secondParagraph: string;
 
   if (poorestMetric) {
-    // Use the genuinely poor PageSpeed metric
+    // Use the genuinely poor PageSpeed metric - let AI craft the impact statement
     const intro = getMetricIntro(poorestMetric.name, poorestMetric.score);
-    const impact = getMetricImpact(poorestMetric.name, poorestMetric.score);
-    introHook = `${intro}, ${impact}.`;
+    introHook = `${intro}, [add a brief, natural impact statement about how this affects their business].`;
     introMetric = `${poorestMetric.name}: ${poorestMetric.score}/100 (below industry threshold)`;
-    exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions before visitors even see your offer.`;
+    exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions.`;
     secondParagraph = `Also, your hero section has some ${issueWord} I've flagged below:`;
   } else {
     // All metrics are good - fallback (no hero mention in intro, save it for second paragraph)
     introHook = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
-    introMetric = `All PageSpeed metrics meet industry standards - focusing on hero section issues`;
+    introMetric = `All PageSpeed metrics meet industry standards - focusing on visual design issues`;
     exampleIntro = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
     secondParagraph = `Your hero section has some ${issueWord} I've flagged below:`;
   }
 
-  // Use custom template or default
-  const template = customTemplate || DEFAULT_EMAIL_TEMPLATE;
+  // Select CTA based on email index (rotates between options)
+  const cta = CTA_OPTIONS[emailIndex % CTA_OPTIONS.length];
 
-  // Interpolate placeholders
+  // Use user's custom email pattern or default
+  const emailPattern = customTemplate || USER_EMAIL_TEMPLATE;
+
+  // Build final prompt: core AI instructions + user's email pattern
+  const template = CORE_PROMPT_TEMPLATE.replace(/\{\{emailPattern\}\}/g, emailPattern);
+
+  // Interpolate placeholders (NOTE: secondParagraph is NOT interpolated here -
+  // it's replaced AFTER AI generation to hide "hero" from the AI)
   return template
     .replace(/\{\{firstName\}\}/g, firstName)
     .replace(/\{\{companyName\}\}/g, context.companyName)
@@ -209,12 +251,39 @@ export function buildEmailPrompt(
     .replace(/\{\{introHook\}\}/g, introHook)
     .replace(/\{\{introMetric\}\}/g, introMetric)
     .replace(/\{\{exampleIntro\}\}/g, exampleIntro)
-    .replace(/\{\{secondParagraph\}\}/g, secondParagraph)
     .replace(/\{\{issueCount\}\}/g, String(issueCount))
-    .replace(/\{\{heroIssues\}\}/g, context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues')
     .replace(/\{\{worstProblem\}\}/g, context.worstProblem)
     .replace(/\{\{diagnosticsSummary\}\}/g, context.diagnosticsSummary)
-    .replace(/\{\{issueWord\}\}/g, issueWord);
+    .replace(/\{\{issueWord\}\}/g, issueWord)
+    .replace(/\{\{cta\}\}/g, cta);
+}
+
+/**
+ * Get the transition sentence (second paragraph) for an email.
+ * This is kept separate from buildEmailPrompt to hide "hero" from the AI.
+ */
+export function getTransitionSentence(context: PromptContext): string {
+  const issueCount = context.annotationLabels.length || context.problemCount || 1;
+  const issueWord = issueCount === 1 ? 'issue' : 'issues';
+
+  // Check if we have a poor metric (determines "Also," prefix)
+  const parsedDiagnostics = context.diagnosticsSummary
+    .split(' | ')
+    .map(d => {
+      const match = d.match(/^(.+?):\s*\w+\s*\((\d+)\/100\)/);
+      if (match) {
+        return { name: match[1], score: parseInt(match[2], 10) };
+      }
+      return null;
+    })
+    .filter((d): d is { name: string; score: number } => d !== null);
+
+  const pageSpeedMetrics = ['Performance Score', 'Accessibility Score', 'SEO Score', 'Best Practices Score'];
+  const hasPoorMetric = parsedDiagnostics.some(d =>
+    pageSpeedMetrics.includes(d.name) && d.score < 80
+  );
+
+  return `Also, your hero section has some ${issueWord} I've flagged below:`;
 }
 
 export function buildDiagnosticsSummary(diagnostics: DiagnosticResult[]): string {

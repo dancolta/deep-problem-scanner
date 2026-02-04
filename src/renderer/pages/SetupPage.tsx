@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import { DEFAULT_EMAIL_TEMPLATE } from '../../services/email/prompt-template';
 import './SetupPage.css';
 
 interface SavedSettings {
@@ -32,10 +31,6 @@ export default function SetupPage() {
   const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
   const [sheetError, setSheetError] = useState<string | null>(null);
 
-  // Email template state
-  const [emailTemplate, setEmailTemplate] = useState('');
-  const [templateSaveStatus, setTemplateSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
-  const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
 
   // Load settings and auth status on mount
   useEffect(() => {
@@ -51,32 +46,6 @@ export default function SetupPage() {
     setSheetError(null);
   }, [sheetUrl]);
 
-  // Auto-save email template with debounce
-  useEffect(() => {
-    // Skip if template is empty or matches default (no need to save default)
-    if (!emailTemplate) return;
-
-    setTemplateSaveStatus('saving');
-    const timer = setTimeout(async () => {
-      try {
-        // Get current settings first
-        const result = await ipc<{ success: boolean; settings?: SavedSettings }>(IPC_CHANNELS.SETTINGS_GET);
-        const currentSettings = result?.settings || {};
-
-        // Save with updated template
-        await ipc(IPC_CHANNELS.SETTINGS_SET, {
-          ...currentSettings,
-          customEmailTemplate: emailTemplate,
-        });
-        setTemplateSaveStatus('saved');
-        setTimeout(() => setTemplateSaveStatus('idle'), 2000);
-      } catch {
-        setTemplateSaveStatus('idle');
-      }
-    }, 800);
-
-    return () => clearTimeout(timer);
-  }, [emailTemplate]);
 
   async function ipc<T = any>(channel: string, ...args: any[]): Promise<T> {
     return await window.electronAPI.invoke(channel, ...args) as T;
@@ -110,16 +79,9 @@ export default function SetupPage() {
           setPageSpeedApiKey(s.pageSpeedApiKey);
           setPageSpeedStatus('valid'); // Was saved previously, assume valid
         }
-        if (s.customEmailTemplate) {
-          setEmailTemplate(s.customEmailTemplate);
-        } else {
-          // Load default template
-          setEmailTemplate(DEFAULT_EMAIL_TEMPLATE);
-        }
       }
     } catch {
       // Settings not available yet, use defaults
-      setEmailTemplate(DEFAULT_EMAIL_TEMPLATE);
     }
   }
 
@@ -206,12 +168,6 @@ export default function SetupPage() {
       setSaveStatus('error');
       setTimeout(() => setSaveStatus('idle'), 3000);
     }
-  }
-
-  async function handleRestoreDefault() {
-    setEmailTemplate(DEFAULT_EMAIL_TEMPLATE);
-    setShowRestoreConfirm(false);
-    // Auto-save will trigger from useEffect
   }
 
   return (
@@ -382,54 +338,7 @@ export default function SetupPage() {
           </div>
         </div>
 
-        {/* Email Template */}
-        <div className="setup-card setup-card--wide">
-          <div className="card-header-row">
-            <div>
-              <h3>Email Template</h3>
-              <p className="hint-text">Customize the AI prompt template used to generate outreach emails. Use {'{'}{'{'} placeholders {'}'}{'}'}  for dynamic values.</p>
-            </div>
-            <div className="template-actions">
-              {templateSaveStatus === 'saving' && <span className="save-indicator">Saving...</span>}
-              {templateSaveStatus === 'saved' && <span className="save-indicator save-indicator--success">Saved ✓</span>}
-              <button
-                className="btn btn--outline btn--small"
-                onClick={() => setShowRestoreConfirm(true)}
-              >
-                Restore to Default
-              </button>
-            </div>
-          </div>
-          <textarea
-            className="template-editor"
-            value={emailTemplate}
-            onChange={(e) => setEmailTemplate(e.target.value)}
-            placeholder="Email template..."
-            rows={20}
-          />
-          <p className="hint-text" style={{ marginTop: '8px' }}>
-            Available placeholders: {'{{'}firstName{'}}'}, {'{{'}companyName{'}}'}, {'{{'}domain{'}}'}, {'{{'}loadTime{'}}'}, {'{{'}conversionLoss{'}}'}, {'{{'}issueCount{'}}'}, {'{{'}heroIssues{'}}'}, {'{{'}worstProblem{'}}'}, {'{{'}diagnosticsSummary{'}}'}, {'{{'}issueWord{'}}'}
-          </p>
-        </div>
       </div>
-
-      {/* Restore Confirmation Modal */}
-      {showRestoreConfirm && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h3>Restore Default Template?</h3>
-            <p>This will replace your current template with the factory default. This action cannot be undone.</p>
-            <div className="modal-actions">
-              <button className="btn btn--outline" onClick={() => setShowRestoreConfirm(false)}>
-                Cancel
-              </button>
-              <button className="btn btn--primary" onClick={handleRestoreDefault}>
-                Restore Default
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Save Button */}
       <button className="btn btn--primary btn--large" onClick={handleSave} disabled={saveStatus === 'saving'}>

@@ -599,7 +599,7 @@ export function registerAllHandlers(): void {
               // No custom template, use default
             }
 
-            const email = await emailGen.generateEmail(promptContext, undefined, customTemplate);
+            const email = await emailGen.generateEmail(promptContext, undefined, customTemplate, i);
             console.timeEnd(`[IPC] email-${i}`);
 
             // 6. Build sheet row
