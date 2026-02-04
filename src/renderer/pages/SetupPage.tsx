@@ -9,7 +9,6 @@ interface SavedSettings {
   geminiApiKey?: string;
   pageSpeedApiKey?: string;
   customEmailTemplate?: string;
-  sendFromEmail?: string;
 }
 
 export default function SetupPage() {
@@ -31,7 +30,6 @@ export default function SetupPage() {
   const [pageSpeedStatus, setPageSpeedStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
   const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
   const [sheetError, setSheetError] = useState<string | null>(null);
-  const [sendFromEmail, setSendFromEmail] = useState('');
 
 
   // Load settings and auth status on mount
@@ -80,9 +78,6 @@ export default function SetupPage() {
         if (s.pageSpeedApiKey) {
           setPageSpeedApiKey(s.pageSpeedApiKey);
           setPageSpeedStatus('valid'); // Was saved previously, assume valid
-        }
-        if (s.sendFromEmail) {
-          setSendFromEmail(s.sendFromEmail);
         }
       }
     } catch {
@@ -166,7 +161,6 @@ export default function SetupPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         geminiApiKey,
         pageSpeedApiKey,
-        sendFromEmail: sendFromEmail || undefined,
       });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -322,29 +316,6 @@ export default function SetupPage() {
               <span className="status-dot status-dot--red" />
               <span style={{ color: '#ef4444' }}>{sheetError}</span>
             </div>
-          )}
-        </div>
-
-        {/* Send From Email */}
-        <div className="setup-card">
-          <h3>Send From Email</h3>
-          <p className="hint-text" style={{ marginBottom: '10px' }}>
-            Optional: Use a Gmail alias as the "From" address (must be configured in Gmail Settings → Accounts).
-          </p>
-          <div className="input-group">
-            <input
-              type="email"
-              value={sendFromEmail}
-              onChange={(e) => setSendFromEmail(e.target.value)}
-              placeholder="e.g., dan.colta@partnership-nodesparks.com"
-              className="input"
-              style={{ flex: 1 }}
-            />
-          </div>
-          {sendFromEmail && (
-            <p className="hint-text" style={{ marginTop: '8px' }}>
-              Emails will be sent from: {sendFromEmail}
-            </p>
           )}
         </div>
 

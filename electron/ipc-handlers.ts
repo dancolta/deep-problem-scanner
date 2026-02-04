@@ -279,9 +279,8 @@ export function registerAllHandlers(): void {
     IPC_CHANNELS.SCAN_START,
     async (event, { leads, spreadsheetId }: { leads: any[]; spreadsheetId?: string }) => {
       try {
-        // Load settings for API keys and email config
+        // Load settings for API keys
         let pageSpeedApiKey: string | undefined;
-        let sendFromEmail: string | undefined;
         try {
           const settingsPath = path.join(app.getPath('userData'), 'settings.json');
           const settingsContent = await fs.readFile(settingsPath, 'utf-8');
@@ -293,10 +292,6 @@ export function registerAllHandlers(): void {
           if (settings.pageSpeedApiKey) {
             pageSpeedApiKey = settings.pageSpeedApiKey;
             console.log('[IPC] Loaded PageSpeed API key from settings.json');
-          }
-          if (settings.sendFromEmail) {
-            sendFromEmail = settings.sendFromEmail;
-            console.log('[IPC] Using send-from email:', sendFromEmail);
           }
         } catch {
           // settings.json may not exist yet
@@ -634,7 +629,7 @@ export function registerAllHandlers(): void {
                 status: 'draft' as const,
               };
 
-              gmail.createDraft(draftPayload, sectionScreenshots[0].buffer, sendFromEmail).then(
+              gmail.createDraft(draftPayload, sectionScreenshots[0].buffer).then(
                 (draftResult) => {
                   sheetRow.draft_id = draftResult.draftId;
                   console.log(`[IPC] Gmail draft created: ${draftResult.draftId}`);
