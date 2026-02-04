@@ -91,6 +91,45 @@ npm run package
 5. **Drafts** - Review and approve AI-generated personalized emails
 6. **Schedule** - Set send intervals and time windows for approved emails
 
+## Lead Import Format
+
+### Google Sheets (Recommended)
+
+Import leads directly from Google Sheets. The app recognizes flexible column headers:
+
+| Field | Recognized Headers |
+|-------|-------------------|
+| Company Name | `Company`, `Company Name`, `Business`, `Organization`, `Account` |
+| Website URL | `Website`, `URL`, `Site`, `Domain`, `Homepage` |
+| Contact Email | `Email`, `Contact Email`, `Mail`, `Email Address` |
+| Contact Name | `Name`, `Contact Name`, `Full Name`, `Contact` |
+| First Name | `First Name`, `First` |
+| Last Name | `Last Name`, `Last`, `Surname` |
+
+> **Note:** If `Contact Name` is not provided, the app will combine `First Name` + `Last Name` automatically.
+
+### Example Sheet Structure
+
+| Done | First Name | Last Name | Company Name | Website | Email |
+|------|------------|-----------|--------------|---------|-------|
+| ☐ | John | Smith | Acme Inc | acme.com | john@acme.com |
+| ☑ | Jane | Doe | Beta Corp | beta.io | jane@beta.io |
+| ☐ | Bob | Wilson | Gamma LLC | gamma.co | bob@gamma.co |
+
+### Processed/Done Column
+
+Add a **checkbox column** (recommended name: `Done` or `Processed`) to track which leads have been emailed:
+
+- **On Import**: Rows with checkbox checked (TRUE) are skipped and shown as "Already processed"
+- **After Scan**: The app automatically marks the checkbox TRUE for successfully scanned leads
+- **Benefit**: Prevents duplicate emails when re-importing the same lead list
+
+Recognized header names: `Done`, `Processed`, `Completed`, `Sent`, `Emailed`
+
+### CSV Import
+
+CSV files follow the same column format. Headers are matched case-insensitively.
+
 ## Project Structure
 
 ```
