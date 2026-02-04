@@ -102,26 +102,34 @@ export class EmailGenerator {
   }
 
   /**
-   * Apply buzzword blacklist to filter forbidden words/phrases from the email body.
+   * Apply buzzword blacklist to filter forbidden words/phrases from the opening paragraph only.
+   * The transition sentence (second paragraph with "hero section") is preserved.
    * Uses the centralized BUZZWORD_BLACKLIST for consistent filtering.
    */
   private applyBuzzwordBlacklist(body: string): string {
-    let result = body;
+    // Split into paragraphs: [0] = "Hi Name,", [1] = intro, [2+] = rest
+    const paragraphs = body.split(/\n\n+/);
 
-    // Apply each blacklist pattern in order (more specific patterns first)
+    if (paragraphs.length < 2) return body;
+
+    // Only apply blacklist to the intro paragraph (index 1)
+    let introParagraph = paragraphs[1];
+
     for (const { pattern, replacement } of BUZZWORD_BLACKLIST) {
-      result = result.replace(pattern, replacement);
+      introParagraph = introParagraph.replace(pattern, replacement);
     }
 
     // Clean up any artifacts from replacements
-    result = result
+    introParagraph = introParagraph
       .replace(/\s{2,}/g, ' ')      // multiple spaces → single space
       .replace(/\s+\./g, '.')        // space before period
       .replace(/\s+,/g, ',')         // space before comma
       .replace(/,\s*,/g, ',')        // double commas
-      .replace(/\.\s*\./g, '.');     // double periods
+      .replace(/\.\s*\./g, '.')      // double periods
+      .trim();
 
-    return result;
+    paragraphs[1] = introParagraph;
+    return paragraphs.join('\n\n');
   }
 
   /**
@@ -198,7 +206,7 @@ export class EmailGenerator {
 
 ${introText}
 
-Also, your above-the-fold area has some ${issueWord} I've flagged below:
+Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.`;

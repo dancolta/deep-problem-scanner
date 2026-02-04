@@ -68,7 +68,7 @@ RULES:
 8. NO signature - Gmail will add it automatically
 9. Tone: Direct, expert, helpful
 10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
-11. NEVER use "hero" or "hero section" in the email. Use alternatives like "header", "above-the-fold area", or "main section" instead.
+11. NEVER use "hero" or "hero section" in the OPENING sentence. The transition sentence will mention "hero section" separately, so avoid it in your intro to prevent repetition.
 
 SPACING RULES:
 - After [TRANSITION_SENTENCE] → single newline → [IMAGE] (NO blank line between text and image)
@@ -194,13 +194,13 @@ export function buildEmailPrompt(
     introHook = `${intro}, ${impact}.`;
     introMetric = `${poorestMetric.name}: ${poorestMetric.score}/100 (below industry threshold)`;
     exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions before visitors even see your offer.`;
-    secondParagraph = `Also, your above-the-fold area has some ${issueWord} I've flagged below:`;
+    secondParagraph = `Also, your hero section has some ${issueWord} I've flagged below:`;
   } else {
     // All metrics are good - fallback (no hero mention in intro, save it for second paragraph)
     introHook = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
     introMetric = `All PageSpeed metrics meet industry standards - focusing on visual design issues`;
     exampleIntro = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
-    secondParagraph = `Your above-the-fold area has some ${issueWord} I've flagged below:`;
+    secondParagraph = `Your hero section has some ${issueWord} I've flagged below:`;
   }
 
   // Use custom template or default
@@ -247,9 +247,9 @@ export function getTransitionSentence(context: PromptContext): string {
   );
 
   if (hasPoorMetric) {
-    return `Also, your above-the-fold area has some ${issueWord} I've flagged below:`;
+    return `Also, your hero section has some ${issueWord} I've flagged below:`;
   } else {
-    return `Your above-the-fold area has some ${issueWord} I've flagged below:`;
+    return `Your hero section has some ${issueWord} I've flagged below:`;
   }
 }
 
