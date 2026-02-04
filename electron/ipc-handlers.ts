@@ -10,6 +10,7 @@ import { compressImage, compressForEmail } from '../src/services/annotation/comp
 import { AnnotationCoord } from '../src/services/annotation/types';
 import { VerifiedIssue } from '../src/services/scanner/playwright-scanner';
 import type { ScanPhase, ScanCompletionSummary } from '../src/shared/types';
+import { SheetsLeadImporter, extractSpreadsheetId, extractGid } from '../src/services/google/sheets-lead-importer';
 
 const PHASE_DESCRIPTIONS: Record<ScanPhase, string> = {
   initializing: 'Initializing scan...',
@@ -733,6 +734,117 @@ export function registerAllHandlers(): void {
     } catch (error) {
       console.error('[IPC] SHEETS_UPDATE_ROW error:', error);
       return { success: false, error: String(error) };
+    }
+  });
+
+  // --- Google Sheets Lead Import ---
+  ipcMain.handle(IPC_CHANNELS.SHEETS_IMPORT_LEADS, async (_event, url: string) => {
+    try {
+      // 1. Extract spreadsheet ID and gid from URL
+      const spreadsheetId = extractSpreadsheetId(url);
+      if (!spreadsheetId) {
+        return { success: false, error: 'Please enter a valid Google Sheets URL' };
+      }
+      const gid = extractGid(url);
+
+      // 2. Get authenticated client and create importer
+      const authClient = await registry.googleAuth.getAuthenticatedClient();
+      const importer = new SheetsLeadImporter(authClient);
+
+      // 3. Import leads from the sheet (using specific tab if gid provided)
+      const { leads, sheetName, totalRows, headers } = await importer.importLeads(spreadsheetId, gid);
+
+      // Log for debugging
+      console.log('[IPC] SHEETS_IMPORT_LEADS - Headers found:', headers);
+      console.log('[IPC] SHEETS_IMPORT_LEADS - Leads parsed from sheet:', leads.length, 'of', totalRows);
+
+      // If no leads parsed, return early with debug info
+      if (leads.length === 0) {
+        return {
+          success: true,
+          result: {
+            leads: [],
+            totalParsed: totalRows,
+            invalidLeads: [],
+            duplicateEmails: [],
+            alreadyScanned: [],
+            skippedByRange: 0,
+          },
+          sheetName,
+          debug: {
+            headers,
+            message: `No leads matched. Expected columns: company/business, website/url, email. Found: ${headers.join(', ')}`
+          }
+        };
+      }
+
+      // 4. Validate leads through existing CSV validation pipeline
+      const csvParser = registry.csvParser;
+      const { valid: validLeads, invalid: invalidLeads } = csvParser.validateLeads(leads);
+
+      // 5. Filter duplicate emails within the imported data
+      const { unique: uniqueLeads, duplicates: duplicateEmails } = csvParser.filterDuplicateEmails(validLeads);
+
+      // 6. Check for already-scanned leads via the output sheet (if configured)
+      let readyLeads = uniqueLeads;
+      let alreadyScanned: typeof leads = [];
+
+      try {
+        const settingsPath = path.join(app.getPath('userData'), 'settings.json');
+        const settingsContent = await fs.readFile(settingsPath, 'utf-8');
+        const settings = JSON.parse(settingsContent);
+
+        if (settings.googleSheetUrl) {
+          const outputSheetMatch = settings.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+          const outputSpreadsheetId = outputSheetMatch ? outputSheetMatch[1] : null;
+
+          if (outputSpreadsheetId) {
+            const sheets = await registry.getSheets();
+            const urls = readyLeads.map(l => l.website_url);
+            const existingUrls = await sheets.checkDuplicates(outputSpreadsheetId, urls);
+            const existingSet = new Set(existingUrls.map(u => u.toLowerCase().replace(/\/+$/, '')));
+
+            alreadyScanned = readyLeads.filter(l =>
+              existingSet.has(l.website_url.toLowerCase().replace(/\/+$/, ''))
+            );
+            readyLeads = readyLeads.filter(l =>
+              !existingSet.has(l.website_url.toLowerCase().replace(/\/+$/, ''))
+            );
+          }
+        }
+      } catch {
+        // Settings may not exist or output sheet not configured - proceed without duplicate check
+      }
+
+      // 7. Return PipelineResult-like structure
+      return {
+        success: true,
+        result: {
+          leads: readyLeads,
+          totalParsed: totalRows,
+          invalidLeads,
+          duplicateEmails,
+          alreadyScanned,
+          skippedByRange: 0,
+        },
+        sheetName,
+      };
+    } catch (error: any) {
+      const msg = error?.message || String(error);
+      console.error('[IPC] SHEETS_IMPORT_LEADS error:', msg);
+
+      // Handle specific error types with user-friendly messages
+      if (msg.includes('404') || msg.includes('not found') || msg.includes('Requested entity was not found')) {
+        return { success: false, error: 'Spreadsheet not found. Check URL or if deleted.' };
+      }
+      if (msg.includes('403') || msg.includes('permission') || msg.includes('does not have permission')) {
+        return { success: false, error: "Unable to access. Share sheet with your Google account or set to 'Anyone with link'" };
+      }
+      if (msg.includes('EMPTY_SHEET') || msg.includes('empty') || msg.includes('No data')) {
+        return { success: false, error: 'Sheet appears empty. Add data below headers.' };
+      }
+
+      return { success: false, error: msg };
     }
   });
 

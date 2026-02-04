@@ -1,9 +1,11 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { Lead } from '../../shared/types';
 import { useScan } from '../context/ScanContext';
 import './UploadPage.css';
+
+type ImportSource = 'csv' | 'sheets';
 
 interface PipelineResult {
   leads: Lead[];
@@ -20,6 +22,14 @@ interface ParseResponse {
   error?: string;
 }
 
+interface SheetsImportResponse extends ParseResponse {
+  sheetName?: string;
+  debug?: {
+    headers: string[];
+    message: string;
+  };
+}
+
 export default function UploadPage() {
   const [file, setFile] = useState<File | null>(null);
   const [parseResult, setParseResult] = useState<PipelineResult | null>(null);
@@ -32,6 +42,21 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const { startScan } = useScan();
+
+  // New state variables for tabbed interface
+  const [importSource, setImportSource] = useState<ImportSource>('csv');
+  const [sheetsUrl, setSheetsUrl] = useState('');
+  const [sheetsStatus, setSheetsStatus] = useState<'idle' | 'importing' | 'connected' | 'error'>('idle');
+  const [sheetsError, setSheetsError] = useState<string | null>(null);
+  const [sheetName, setSheetName] = useState<string | null>(null);
+
+  // Helper for URL validation
+  const sheetsId = useMemo(() => {
+    const match = sheetsUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
+    return match ? match[1] : null;
+  }, [sheetsUrl]);
+
+  const isValidSheetsUrl = Boolean(sheetsId) || (sheetsUrl.length > 20 && /^[a-zA-Z0-9_-]+$/.test(sheetsUrl));
 
   const parseFile = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
@@ -108,7 +133,65 @@ export default function UploadPage() {
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    // Also clear sheets-related state
+    setSheetsUrl('');
+    setSheetsStatus('idle');
+    setSheetsError(null);
+    setSheetName(null);
   }, []);
+
+  // Tab switch handler
+  const handleTabSwitch = useCallback((newSource: ImportSource) => {
+    if (newSource === importSource) return;
+
+    // Clear all state
+    handleClear();
+    setSheetsUrl('');
+    setSheetsStatus('idle');
+    setSheetsError(null);
+    setSheetName(null);
+
+    setImportSource(newSource);
+  }, [importSource, handleClear]);
+
+  // Sheets import handler
+  const handleImportFromSheets = useCallback(async () => {
+    if (!sheetsUrl.trim()) return;
+
+    setSheetsStatus('importing');
+    setSheetsError(null);
+    setParseResult(null);
+    setParseError(null);
+
+    try {
+      const response = await window.electronAPI.invoke(
+        IPC_CHANNELS.SHEETS_IMPORT_LEADS,
+        sheetsUrl
+      ) as SheetsImportResponse;
+
+      if (response.success && response.result) {
+        setParseResult(response.result);
+        setSheetName(response.sheetName || null);
+        setRangeEnd(Math.max(response.result.leads.length - 1, 0));
+        setSheetsStatus('connected');
+
+        // Show debug info if no leads were matched
+        if (response.result.leads.length === 0 && response.debug) {
+          setSheetsError(response.debug.message);
+        }
+      } else {
+        setSheetsError(response.error || 'Failed to import from Google Sheets');
+        setSheetsStatus('error');
+      }
+    } catch (err) {
+      setSheetsError(err instanceof Error ? err.message : 'Unknown error');
+      setSheetsStatus('error');
+    }
+  }, [sheetsUrl]);
+
+  const handleRefreshFromSheets = useCallback(async () => {
+    await handleImportFromSheets();
+  }, [handleImportFromSheets]);
 
   const getLeadsToScan = useCallback((): Lead[] => {
     if (!parseResult) return [];
@@ -150,39 +233,107 @@ export default function UploadPage() {
       <h2>Upload Leads</h2>
       <p>Upload a CSV file with leads to scan and reach out to.</p>
 
-      <div
-        className={`upload-zone ${isDragOver ? 'upload-zone--active' : ''} ${file ? 'upload-zone--has-file' : ''}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
-        onClick={() => fileInputRef.current?.click()}
-      >
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".csv"
-          onChange={handleFileSelect}
-          style={{ display: 'none' }}
-        />
-        {isLoading ? (
-          <>
-            <div className="upload-icon">&#8987;</div>
-            <p className="upload-text">Parsing CSV...</p>
-          </>
-        ) : !file ? (
-          <>
-            <div className="upload-icon">&#128193;</div>
-            <p className="upload-text">Drag &amp; drop a CSV file here</p>
-            <p className="upload-subtext">or click to browse</p>
-          </>
-        ) : (
-          <>
-            <div className="upload-icon">&#9989;</div>
-            <p className="upload-text">{file.name}</p>
-            <p className="upload-subtext">{(file.size / 1024).toFixed(1)} KB</p>
-          </>
-        )}
+      {/* Import method tabs */}
+      <div className="import-tabs">
+        <button
+          className={`import-tab ${importSource === 'csv' ? 'import-tab--active' : ''}`}
+          onClick={() => handleTabSwitch('csv')}
+        >
+          CSV File
+        </button>
+        <button
+          className={`import-tab ${importSource === 'sheets' ? 'import-tab--active' : ''}`}
+          onClick={() => handleTabSwitch('sheets')}
+        >
+          Google Sheets
+        </button>
       </div>
+
+      {importSource === 'csv' && (
+        <div
+          className={`upload-zone ${isDragOver ? 'upload-zone--active' : ''} ${file ? 'upload-zone--has-file' : ''}`}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          {isLoading ? (
+            <>
+              <div className="upload-icon">&#8987;</div>
+              <p className="upload-text">Parsing CSV...</p>
+            </>
+          ) : !file ? (
+            <>
+              <div className="upload-icon">&#128193;</div>
+              <p className="upload-text">Drag &amp; drop a CSV file here</p>
+              <p className="upload-subtext">or click to browse</p>
+            </>
+          ) : (
+            <>
+              <div className="upload-icon">&#9989;</div>
+              <p className="upload-text">{file.name}</p>
+              <p className="upload-subtext">{(file.size / 1024).toFixed(1)} KB</p>
+            </>
+          )}
+        </div>
+      )}
+
+      {importSource === 'sheets' && (
+        <div className="sheets-import-section">
+          <div className="sheets-input-row">
+            <input
+              type="text"
+              value={sheetsUrl}
+              onChange={(e) => {
+                setSheetsUrl(e.target.value);
+                setSheetsStatus('idle');
+                setSheetsError(null);
+              }}
+              placeholder="https://docs.google.com/spreadsheets/d/..."
+              className="input input--full"
+              disabled={sheetsStatus === 'importing'}
+            />
+          </div>
+
+          <div className="sheets-actions">
+            <button
+              className="btn btn--primary"
+              onClick={handleImportFromSheets}
+              disabled={!isValidSheetsUrl || sheetsStatus === 'importing'}
+            >
+              {sheetsStatus === 'importing' ? 'Importing...' : 'Import Leads'}
+            </button>
+
+            {sheetsStatus === 'connected' && (
+              <button
+                className="btn btn--outline"
+                onClick={handleRefreshFromSheets}
+              >
+                Refresh from Sheet
+              </button>
+            )}
+          </div>
+
+          {/* Connection status */}
+          {sheetsStatus === 'connected' && sheetName && (
+            <div className="sheets-status sheets-status--connected">
+              <span className="status-dot status-dot--green"></span>
+              <span>Connected to "{sheetName}"</span>
+            </div>
+          )}
+
+          {sheetsError && (
+            <div className="banner banner--error">{sheetsError}</div>
+          )}
+        </div>
+      )}
 
       {parseError && <div className="banner banner--error">{parseError}</div>}
       {parseResult && (
@@ -298,7 +449,7 @@ export default function UploadPage() {
       )}
 
       <div className="action-buttons">
-        <button className="btn btn--outline" onClick={handleClear} disabled={!file}>
+        <button className="btn btn--outline" onClick={handleClear} disabled={!file && !parseResult}>
           Clear
         </button>
         <button

@@ -290,6 +290,104 @@
   color: var(--text-primary);
 }
 
+/* Import method tabs */
+.import-tabs {
+  display: flex;
+  gap: 0;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.import-tab {
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-tertiary);
+  font-size: 14px;
+  font-weight: var(--font-medium);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.import-tab:hover {
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+}
+
+.import-tab--active {
+  color: var(--text-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* Google Sheets import section */
+.sheets-import-section {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  margin-top: 8px;
+}
+
+.sheets-input-row {
+  margin-bottom: 16px;
+}
+
+.sheets-input-row .input--full {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  padding: 12px 16px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.sheets-input-row .input--full:focus {
+  border-color: var(--accent-primary);
+}
+
+.sheets-input-row .input--full:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.sheets-input-row .input--full::placeholder {
+  color: var(--text-placeholder);
+}
+
+.sheets-actions {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.sheets-status {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+}
+
+.sheets-status--connected {
+  background: var(--success-subtle);
+  color: var(--success-text);
+}
+
+.sheets-status .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.sheets-status .status-dot--green {
+  background: var(--success);
+}
+
 /* ============================================
    RESPONSIVE BREAKPOINTS
    ============================================ */
@@ -356,6 +454,27 @@
   .summary-row {
     font-size: var(--text-sm);
   }
+
+  .import-tabs {
+    gap: 4px;
+  }
+
+  .import-tab {
+    padding: 10px 16px;
+    font-size: var(--text-sm);
+  }
+
+  .sheets-import-section {
+    padding: 20px;
+  }
+
+  .sheets-actions {
+    flex-direction: column;
+  }
+
+  .sheets-actions .btn {
+    width: 100%;
+  }
 }
 
 @media (max-width: 480px) {
@@ -411,5 +530,33 @@
 
   .summary-row span:last-child {
     font-weight: var(--font-semibold);
+  }
+
+  .import-tabs {
+    flex-direction: column;
+    border-bottom: none;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .import-tab {
+    border-bottom: none;
+    border-radius: var(--radius-lg);
+    border: 1px solid var(--border-default);
+    text-align: center;
+  }
+
+  .import-tab--active {
+    background: var(--accent-primary-subtle);
+    border-color: var(--accent-primary);
+  }
+
+  .sheets-import-section {
+    padding: 16px;
+  }
+
+  .sheets-input-row .input--full {
+    padding: 10px 14px;
+    font-size: var(--text-sm);
   }
 }
