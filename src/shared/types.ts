@@ -35,7 +35,11 @@ export interface Lead {
   website_url: string;
   contact_name: string;
   contact_email: string;
-  [key: string]: string; // Additional CSV columns
+  // Source tracking for Google Sheets import (enables marking as processed)
+  sourceSpreadsheetId?: string;
+  sourceSheetName?: string;
+  sourceRowNumber?: number;
+  [key: string]: string | number | undefined; // Additional columns
 }
 
 export interface ScanProgress {

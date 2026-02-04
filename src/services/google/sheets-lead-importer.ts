@@ -4,6 +4,9 @@ import { OAuth2Client } from 'google-auth-library';
 // Column header variants to match (normalized: lowercase, spaces→underscores)
 // Must match csv-parser.ts COLUMN_VARIANTS
 const LEAD_COLUMN_VARIANTS: Record<string, string[]> = {
+  processed: [
+    'processed', 'proccesed', 'proccessed', 'done', 'completed', 'sent', 'emailed'
+  ],
   company_name: [
     'company_name', 'company', 'companyname', 'business', 'business_name',
     'company_name_for_emails', 'organization', 'org', 'client', 'account'
@@ -31,10 +34,13 @@ export interface SheetImportResult {
     website_url: string;
     contact_name: string;
     contact_email: string;
+    sourceRowNumber: number;  // 1-based row number for marking as processed
   }>;
   sheetName: string;
   totalRows: number;
   headers: string[];
+  alreadyProcessed: number;  // Count of rows with Processed=TRUE
+  spreadsheetId: string;     // For tracking source sheet
 }
 
 export function extractSpreadsheetId(urlOrId: string): string | null {
@@ -102,26 +108,54 @@ export class SheetsLeadImporter {
     const columnMap = this.buildColumnMap(normalizedHeaders);
     console.log('[SheetsImporter] Column map:', columnMap);
 
-    // 4. Convert rows to leads
+    // Find the processed column index
+    const processedColIndex = columnMap['processed'];
+    console.log('[SheetsImporter] Processed column index:', processedColIndex);
+
+    // 4. Convert rows to leads, skipping already-processed ones
     const leads: SheetImportResult['leads'] = [];
+    let alreadyProcessed = 0;
+
     for (let i = 1; i < rows.length; i++) {
       const row = rows[i];
+
+      // Check if this row is already processed (checkbox is TRUE)
+      if (processedColIndex !== undefined) {
+        const processedValue = row[processedColIndex];
+        // Google Sheets checkboxes return TRUE/FALSE as strings or booleans
+        if (processedValue === true ||
+            processedValue === 'TRUE' ||
+            processedValue === 'true' ||
+            processedValue === '1' ||
+            processedValue === 1) {
+          alreadyProcessed++;
+          console.log(`[SheetsImporter] Row ${i + 1} already processed, skipping`);
+          continue;
+        }
+      }
+
       const lead = this.rowToLead(row, columnMap);
       if (i === 1) {
         console.log('[SheetsImporter] First row data:', row);
         console.log('[SheetsImporter] First lead parsed:', lead);
       }
       if (lead) {
-        leads.push(lead);
+        leads.push({
+          ...lead,
+          sourceRowNumber: i + 1,  // 1-based row number (row 1 = header, row 2 = first data)
+        });
       }
     }
     console.log('[SheetsImporter] Total leads parsed:', leads.length);
+    console.log('[SheetsImporter] Already processed:', alreadyProcessed);
 
     return {
       leads,
       sheetName: spreadsheetName,
       totalRows: rows.length - 1,
       headers,
+      alreadyProcessed,
+      spreadsheetId,
     };
   }
 
@@ -166,5 +200,43 @@ export class SheetsLeadImporter {
     }
 
     return lead;
+  }
+
+  /**
+   * Mark a lead as processed by setting the "Processed" checkbox to TRUE.
+   * This prevents the lead from being imported again on subsequent uploads.
+   */
+  async markAsProcessed(
+    spreadsheetId: string,
+    rowNumber: number,
+    sheetName?: string
+  ): Promise<void> {
+    // Get sheet name if not provided
+    const targetSheetName = sheetName || await this.getFirstSheetName(spreadsheetId);
+
+    console.log(`[SheetsImporter] Marking row ${rowNumber} as processed in "${targetSheetName}"`);
+
+    // Write TRUE to Column A of the specified row (Processed checkbox column)
+    await this.sheets.spreadsheets.values.update({
+      spreadsheetId,
+      range: `'${targetSheetName}'!A${rowNumber}`,
+      valueInputOption: 'USER_ENTERED',
+      requestBody: {
+        values: [[true]],
+      },
+    });
+
+    console.log(`[SheetsImporter] Successfully marked row ${rowNumber} as processed`);
+  }
+
+  /**
+   * Get the name of the first sheet in the spreadsheet.
+   */
+  private async getFirstSheetName(spreadsheetId: string): Promise<string> {
+    const meta = await this.sheets.spreadsheets.get({
+      spreadsheetId,
+      fields: 'sheets.properties.title',
+    });
+    return meta.data.sheets?.[0]?.properties?.title || 'Sheet1';
   }
 }

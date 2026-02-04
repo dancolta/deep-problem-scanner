@@ -7,6 +7,7 @@ export interface PipelineResult {
   invalidLeads: { lead: Lead; reason: string }[];
   duplicateEmails: Lead[];
   alreadyScanned: Lead[];
+  alreadyProcessed: number;  // Leads with "Processed" checkbox marked in source sheet
   skippedByRange: number;
 }
 
@@ -86,6 +87,7 @@ export class LeadPipeline {
       invalidLeads: invalid,
       duplicateEmails: duplicates,
       alreadyScanned,
+      alreadyProcessed: 0,  // CSV imports don't have processed checkbox
       skippedByRange,
     };
   }

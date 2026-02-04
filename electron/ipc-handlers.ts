@@ -9,7 +9,7 @@ import { drawAnnotations } from '../src/services/annotation/drawing';
 import { compressImage, compressForEmail } from '../src/services/annotation/compression';
 import { AnnotationCoord } from '../src/services/annotation/types';
 import { VerifiedIssue } from '../src/services/scanner/playwright-scanner';
-import type { ScanPhase, ScanCompletionSummary } from '../src/shared/types';
+import type { ScanPhase, ScanCompletionSummary, Lead } from '../src/shared/types';
 import { SheetsLeadImporter, extractSpreadsheetId, extractGid } from '../src/services/google/sheets-lead-importer';
 
 const PHASE_DESCRIPTIONS: Record<ScanPhase, string> = {
@@ -640,6 +640,23 @@ export function registerAllHandlers(): void {
               );
             }
 
+            // Mark lead as processed in source sheet (if imported from Google Sheets)
+            if (lead.sourceSpreadsheetId && lead.sourceRowNumber) {
+              try {
+                const authClient = await registry.googleAuth.getAuthenticatedClient();
+                const sourceImporter = new SheetsLeadImporter(authClient);
+                await sourceImporter.markAsProcessed(
+                  lead.sourceSpreadsheetId,
+                  lead.sourceRowNumber,
+                  lead.sourceSheetName
+                );
+                console.log(`[IPC] Marked row ${lead.sourceRowNumber} as processed in source sheet`);
+              } catch (markError) {
+                // Log but don't fail the scan - processed marking is best-effort
+                console.error(`[IPC] Failed to mark lead as processed:`, markError);
+              }
+            }
+
             results.push({
               lead,
               scanStatus: 'SUCCESS',
@@ -752,11 +769,19 @@ export function registerAllHandlers(): void {
       const importer = new SheetsLeadImporter(authClient);
 
       // 3. Import leads from the sheet (using specific tab if gid provided)
-      const { leads, sheetName, totalRows, headers } = await importer.importLeads(spreadsheetId, gid);
+      const {
+        leads,
+        sheetName,
+        totalRows,
+        headers,
+        alreadyProcessed,
+        spreadsheetId: sourceSpreadsheetId,
+      } = await importer.importLeads(spreadsheetId, gid);
 
       // Log for debugging
       console.log('[IPC] SHEETS_IMPORT_LEADS - Headers found:', headers);
       console.log('[IPC] SHEETS_IMPORT_LEADS - Leads parsed from sheet:', leads.length, 'of', totalRows);
+      console.log('[IPC] SHEETS_IMPORT_LEADS - Already processed:', alreadyProcessed);
 
       // If no leads parsed, return early with debug info
       if (leads.length === 0) {
@@ -768,6 +793,7 @@ export function registerAllHandlers(): void {
             invalidLeads: [],
             duplicateEmails: [],
             alreadyScanned: [],
+            alreadyProcessed,
             skippedByRange: 0,
           },
           sheetName,
@@ -778,16 +804,23 @@ export function registerAllHandlers(): void {
         };
       }
 
+      // Add source tracking to each lead (for marking as processed after scan)
+      const leadsWithSource = leads.map(lead => ({
+        ...lead,
+        sourceSpreadsheetId,
+        sourceSheetName: sheetName,
+      }));
+
       // 4. Validate leads through existing CSV validation pipeline
       const csvParser = registry.csvParser;
-      const { valid: validLeads, invalid: invalidLeads } = csvParser.validateLeads(leads);
+      const { valid: validLeads, invalid: invalidLeads } = csvParser.validateLeads(leadsWithSource);
 
       // 5. Filter duplicate emails within the imported data
       const { unique: uniqueLeads, duplicates: duplicateEmails } = csvParser.filterDuplicateEmails(validLeads);
 
       // 6. Check for already-scanned leads via the output sheet (if configured)
       let readyLeads = uniqueLeads;
-      let alreadyScanned: typeof leads = [];
+      let alreadyScanned: Lead[] = [];
 
       try {
         const settingsPath = path.join(app.getPath('userData'), 'settings.json');
@@ -825,6 +858,7 @@ export function registerAllHandlers(): void {
           invalidLeads,
           duplicateEmails,
           alreadyScanned,
+          alreadyProcessed,
           skippedByRange: 0,
         },
         sheetName,

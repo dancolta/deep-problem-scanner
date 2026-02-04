@@ -13,6 +13,7 @@ interface PipelineResult {
   invalidLeads: { lead: Lead; reason: string }[];
   duplicateEmails: Lead[];
   alreadyScanned: Lead[];
+  alreadyProcessed: number;  // Leads with Processed checkbox marked
   skippedByRange: number;
 }
 
@@ -44,7 +45,7 @@ export default function UploadPage() {
   const { startScan } = useScan();
 
   // New state variables for tabbed interface
-  const [importSource, setImportSource] = useState<ImportSource>('csv');
+  const [importSource, setImportSource] = useState<ImportSource>('sheets');
   const [sheetsUrl, setSheetsUrl] = useState('');
   const [sheetsStatus, setSheetsStatus] = useState<'idle' | 'importing' | 'connected' | 'error'>('idle');
   const [sheetsError, setSheetsError] = useState<string | null>(null);
@@ -236,16 +237,16 @@ export default function UploadPage() {
       {/* Import method tabs */}
       <div className="import-tabs">
         <button
-          className={`import-tab ${importSource === 'csv' ? 'import-tab--active' : ''}`}
-          onClick={() => handleTabSwitch('csv')}
-        >
-          CSV File
-        </button>
-        <button
           className={`import-tab ${importSource === 'sheets' ? 'import-tab--active' : ''}`}
           onClick={() => handleTabSwitch('sheets')}
         >
           Google Sheets
+        </button>
+        <button
+          className={`import-tab ${importSource === 'csv' ? 'import-tab--active' : ''}`}
+          onClick={() => handleTabSwitch('csv')}
+        >
+          CSV File
         </button>
       </div>
 
@@ -441,6 +442,12 @@ export default function UploadPage() {
             <span>Already scanned</span>
             <span className="text-yellow">{parseResult.alreadyScanned.length}</span>
           </div>
+          {parseResult.alreadyProcessed > 0 && (
+            <div className="summary-row">
+              <span>Already processed</span>
+              <span className="text-yellow">{parseResult.alreadyProcessed}</span>
+            </div>
+          )}
           <div className="summary-row summary-row--total">
             <span>Ready to scan</span>
             <span className="text-green">{getLeadsToScan().length}</span>
