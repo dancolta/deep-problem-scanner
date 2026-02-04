@@ -1,19 +1,19 @@
 .drafts-page {
   padding: 24px 32px;
-  background: #0f0f23;
+  background: var(--bg-base);
   min-height: 100vh;
-  color: #e0e0e0;
+  color: var(--text-primary);
 }
 
 .drafts-page h2 {
   margin: 0 0 4px;
   font-size: 1.5rem;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .drafts-page .subtitle {
   margin: 0 0 20px;
-  color: #8888aa;
+  color: var(--text-tertiary);
   font-size: 0.9rem;
 }
 
@@ -26,24 +26,24 @@
 
 .drafts-filter-tabs button {
   padding: 6px 16px;
-  border-radius: 20px;
-  border: 1px solid #2a2a4a;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border-subtle);
   background: transparent;
-  color: #8888aa;
+  color: var(--text-tertiary);
   cursor: pointer;
   font-size: 0.85rem;
   transition: all 0.2s;
 }
 
 .drafts-filter-tabs button:hover {
-  border-color: #e94560;
-  color: #e94560;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 .drafts-filter-tabs button.active {
-  background: #e94560;
-  border-color: #e94560;
-  color: #ffffff;
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
 }
 
 /* Top Bar */
@@ -55,7 +55,7 @@
 }
 
 .drafts-count {
-  color: #8888aa;
+  color: var(--text-tertiary);
   font-size: 0.85rem;
 }
 
@@ -66,7 +66,7 @@
 
 .drafts-bulk-actions button {
   padding: 8px 16px;
-  border-radius: 6px;
+  border-radius: var(--radius-lg);
   border: none;
   cursor: pointer;
   font-size: 0.85rem;
@@ -79,8 +79,9 @@
 }
 
 .btn-schedule {
-  background: #e94560;
+  background: var(--accent-primary);
   color: #fff;
+  border-radius: var(--radius-lg);
 }
 
 /* Draft Cards */
@@ -94,36 +95,37 @@
 }
 
 .draft-card {
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: var(--bg-surface);
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
-  border-left: 4px solid #3a3a5c;
+  border-left: 4px solid var(--border-default);
+  box-shadow: var(--shadow-sm);
   transition: box-shadow 0.2s;
 }
 
 .draft-card:hover {
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-md);
 }
 
 .draft-card.status-draft {
-  border-left-color: #3b82f6;
+  border-left-color: var(--info);
 }
 
 .draft-card.status-approved,
 .draft-card.status-scheduled {
-  border-left-color: #16c784;
+  border-left-color: var(--success);
 }
 
 .draft-card.status-rejected {
-  border-left-color: #e94560;
+  border-left-color: var(--danger);
 }
 
 .draft-card.status-sent {
-  border-left-color: #6b7280;
+  border-left-color: var(--text-tertiary);
 }
 
 .draft-card.status-failed {
-  border-left-color: #e94560;
+  border-left-color: var(--danger);
 }
 
 /* Card Header */
@@ -137,12 +139,12 @@
 .draft-card-meta h3 {
   margin: 0 0 2px;
   font-size: 1rem;
-  color: #ffffff;
+  color: var(--text-primary);
 }
 
 .draft-card-meta .contact-info {
   font-size: 0.8rem;
-  color: #8888aa;
+  color: var(--text-tertiary);
 }
 
 .status-badge {
@@ -154,42 +156,42 @@
 }
 
 .status-badge.badge-draft {
-  background: rgba(59, 130, 246, 0.2);
-  color: #3b82f6;
+  background: var(--info-subtle);
+  color: var(--info-text);
 }
 
 .status-badge.badge-approved,
 .status-badge.badge-scheduled {
-  background: rgba(22, 199, 132, 0.2);
-  color: #16c784;
+  background: var(--success-subtle);
+  color: var(--success-text);
 }
 
 .status-badge.badge-rejected {
-  background: rgba(233, 69, 96, 0.2);
-  color: #e94560;
+  background: var(--danger-subtle);
+  color: var(--danger-text);
 }
 
 .status-badge.badge-sent {
-  background: rgba(107, 114, 128, 0.2);
-  color: #6b7280;
+  background: rgba(113, 113, 122, 0.2);
+  color: var(--text-tertiary);
 }
 
 .status-badge.badge-failed {
-  background: rgba(233, 69, 96, 0.2);
-  color: #e94560;
+  background: var(--danger-subtle);
+  color: var(--danger-text);
 }
 
 /* Card Body */
 .draft-card-subject {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #c0c0d0;
+  color: var(--text-secondary);
   margin-bottom: 6px;
 }
 
 .draft-card-body {
   font-size: 0.82rem;
-  color: #8888aa;
+  color: var(--text-tertiary);
   line-height: 1.5;
   white-space: pre-wrap;
   max-height: 80px;
@@ -206,18 +208,18 @@
 
 .draft-card-actions button {
   padding: 5px 12px;
-  border-radius: 4px;
-  border: 1px solid #2a2a4a;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
   background: transparent;
-  color: #8888aa;
+  color: var(--text-tertiary);
   cursor: pointer;
   font-size: 0.8rem;
   transition: all 0.2s;
 }
 
 .draft-card-actions button:hover {
-  border-color: #e94560;
-  color: #e94560;
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
 }
 
 /* Edit Mode */
@@ -225,10 +227,10 @@
 .draft-edit-field textarea {
   width: 100%;
   padding: 8px 10px;
-  border-radius: 4px;
-  border: 1px solid #2a2a4a;
-  background: #12122a;
-  color: #e0e0e0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-input);
+  color: var(--text-primary);
   font-size: 0.85rem;
   font-family: inherit;
   margin-bottom: 8px;
@@ -243,7 +245,7 @@
 .draft-edit-field input:focus,
 .draft-edit-field textarea:focus {
   outline: none;
-  border-color: #e94560;
+  border-color: var(--accent-primary);
 }
 
 .draft-edit-actions {
@@ -253,20 +255,22 @@
 
 .draft-edit-actions button {
   padding: 6px 14px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   border: none;
   cursor: pointer;
   font-size: 0.8rem;
 }
 
 .btn-save {
-  background: #16c784;
+  background: var(--success);
   color: #fff;
+  border-radius: var(--radius-sm);
 }
 
 .btn-cancel {
-  background: #3a3a5c;
-  color: #e0e0e0;
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
 }
 
 /* Loading / Error */
@@ -275,9 +279,151 @@
 .drafts-empty {
   text-align: center;
   padding: 40px;
-  color: #8888aa;
+  color: var(--text-tertiary);
 }
 
 .drafts-error {
-  color: #e94560;
+  color: var(--danger-text);
+}
+
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .drafts-page {
+    padding: 20px;
+    padding-bottom: 100px;
+  }
+
+  .drafts-page h2 {
+    font-size: var(--text-xl);
+  }
+
+  .drafts-filter-tabs {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .drafts-filter-tabs button {
+    padding: 5px 14px;
+    font-size: var(--text-xs);
+  }
+
+  .drafts-top-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .drafts-bulk-actions {
+    width: 100%;
+  }
+
+  .drafts-bulk-actions button {
+    flex: 1;
+  }
+
+  .drafts-list {
+    max-height: calc(100vh - 300px);
+  }
+
+  .draft-card {
+    padding: 14px 16px;
+  }
+
+  .draft-card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .draft-card-meta h3 {
+    font-size: var(--text-sm);
+  }
+
+  .draft-card-subject {
+    font-size: var(--text-sm);
+    word-break: break-word;
+  }
+
+  .draft-card-body {
+    font-size: var(--text-xs);
+    max-height: 60px;
+  }
+
+  .draft-card-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .drafts-page {
+    padding: 16px;
+    padding-bottom: 120px;
+  }
+
+  .drafts-page h2 {
+    font-size: var(--text-lg);
+    margin-bottom: 2px;
+  }
+
+  .drafts-page .subtitle {
+    font-size: var(--text-xs);
+  }
+
+  .drafts-filter-tabs button {
+    padding: 4px 12px;
+  }
+
+  .drafts-count {
+    font-size: var(--text-xs);
+  }
+
+  .drafts-bulk-actions {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .drafts-bulk-actions button {
+    width: 100%;
+  }
+
+  .drafts-list {
+    max-height: calc(100vh - 340px);
+    gap: 10px;
+  }
+
+  .draft-card {
+    padding: 12px 14px;
+  }
+
+  .contact-info {
+    font-size: var(--text-xs);
+  }
+
+  .status-badge {
+    font-size: 10px;
+    padding: 2px 8px;
+  }
+
+  .draft-card-actions button {
+    padding: 4px 10px;
+    font-size: var(--text-xs);
+  }
+
+  .draft-edit-field input,
+  .draft-edit-field textarea {
+    font-size: var(--text-sm);
+    padding: 8px 10px;
+  }
+
+  .draft-edit-actions {
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+
+  .draft-edit-actions button {
+    width: 100%;
+  }
 }
