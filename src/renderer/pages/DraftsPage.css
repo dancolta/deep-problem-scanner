@@ -78,11 +78,6 @@
   opacity: 0.85;
 }
 
-.btn-approve-all {
-  background: #16c784;
-  color: #fff;
-}
-
 .btn-schedule {
   background: #e94560;
   color: #fff;
@@ -202,17 +197,6 @@
   margin-bottom: 10px;
 }
 
-.draft-card-screenshot {
-  margin-bottom: 10px;
-}
-
-.draft-card-screenshot img {
-  max-width: 200px;
-  max-height: 120px;
-  border-radius: 4px;
-  border: 1px solid #2a2a4a;
-}
-
 /* Card Actions */
 .draft-card-actions {
   display: flex;
@@ -234,16 +218,6 @@
 .draft-card-actions button:hover {
   border-color: #e94560;
   color: #e94560;
-}
-
-.draft-card-actions .btn-card-approve {
-  border-color: #16c784;
-  color: #16c784;
-}
-
-.draft-card-actions .btn-card-approve:hover {
-  background: #16c784;
-  color: #fff;
 }
 
 .draft-card-actions .btn-card-reject {

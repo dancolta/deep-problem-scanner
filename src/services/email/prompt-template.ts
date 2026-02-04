@@ -66,8 +66,7 @@ Hi ${firstName},
 
 [HOOK: Start with "I ran a diagnostic on ${domain}." Then state load time + bounce impact. Example: "Your site takes 7.1 seconds to load, ${bounceImpact}."]
 
-See the ${issueWord} I've identified on your hero section
-
+Also, here are some ${issueWord} I've identified on your hero section:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -80,8 +79,7 @@ Hi Sarah,
 
 I ran a diagnostic on talentflow.com. Your site takes 7.1 seconds to load, that typically bounces 40%+ of visitors before they see your offer.
 
-See the issue I've identified on your hero section
-
+Also, here is an issue I've identified on your hero section:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -94,8 +92,7 @@ Hi Mike,
 
 I ran a diagnostic on shopbright.com. Your site takes 13.2 seconds to load, that typically bounces 50%+ of visitors before they see your offer.
 
-Also, see the issues I've identified on your hero section:
-
+Also, here are some issues I've identified on your hero section:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -109,7 +106,7 @@ RULES:
 4. MUST include "I ran a diagnostic on {domain}." in first sentence
 5. MUST include load time in seconds AND bounce impact (e.g., "takes X seconds to load, that typically bounces Y% of visitors before they see your offer")
 6. NO em dashes. Use commas instead.
-7. Second paragraph MUST be: "See the ${issueWord} I've identified on your hero section"
+7. Second paragraph MUST be: "Also, here are some ${issueWord} I've identified on your hero section:"
 8. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
 9. NO signature - Gmail will add it automatically
 10. Tone: Direct, expert, helpful
@@ -118,7 +115,7 @@ RULES:
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi ${firstName},\\n\\nI ran a diagnostic on ${domain}. Your site takes X seconds to load, ${bounceImpact}.\\n\\nSee the ${issueWord} I've identified on your hero section\\n\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi ${firstName},\\n\\nI ran a diagnostic on ${domain}. Your site takes X seconds to load, ${bounceImpact}.\\n\\nAlso, here are some ${issueWord} I've identified on your hero section:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
 }`;
 }
 

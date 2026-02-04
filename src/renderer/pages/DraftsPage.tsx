@@ -19,6 +19,23 @@ interface LocalDraft {
   status: DraftStatus;
 }
 
+/**
+ * Validates that a sheet row has sufficient data to be displayed as a draft.
+ * This filters out orphaned/empty drafts that don't have corresponding document data.
+ *
+ * A valid draft must have:
+ * - company_name (required for display)
+ * - contact_email (required for sending)
+ * - At least email_subject OR email_body (actual draft content)
+ */
+function isValidDraft(row: SheetRow): boolean {
+  const hasCompanyName = Boolean(row.company_name?.trim());
+  const hasContactEmail = Boolean(row.contact_email?.trim());
+  const hasEmailContent = Boolean(row.email_subject?.trim() || row.email_body?.trim());
+
+  return hasCompanyName && hasContactEmail && hasEmailContent;
+}
+
 function mapRowToDraft(row: SheetRow, index: number): LocalDraft {
   const emailStatus = row.email_status || 'draft';
   return {
@@ -74,8 +91,14 @@ export default function DraftsPage() {
         return 0;
       }
       const rows: SheetRow[] = sheetsResp.rows ?? [];
-      setDrafts(rows.map(mapRowToDraft));
-      return rows.length;
+      // Filter out orphaned/empty drafts while preserving original row index for sheet updates
+      // The index passed to mapRowToDraft becomes the draft.id, used for updateSheetRow calls
+      const validDrafts = rows
+        .map((row, index) => ({ row, index }))
+        .filter(({ row }) => isValidDraft(row))
+        .map(({ row, index }) => mapRowToDraft(row, index));
+      setDrafts(validDrafts);
+      return validDrafts.length;
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unknown error loading sheet data.');
       return 0;
@@ -129,22 +152,6 @@ export default function DraftsPage() {
     },
     [spreadsheetId]
   );
-
-  const approveAll = useCallback(async () => {
-    const draftIds: number[] = [];
-    setDrafts((prev) =>
-      prev.map((d) => {
-        if (d.status === 'draft') {
-          draftIds.push(d.id);
-          return { ...d, status: 'approved' as DraftStatus };
-        }
-        return d;
-      })
-    );
-    for (const id of draftIds) {
-      await updateSheetRow(id, { email_status: 'approved' });
-    }
-  }, [updateSheetRow]);
 
   const setDraftStatus = useCallback(
     async (id: number, status: DraftStatus) => {
@@ -237,11 +244,8 @@ export default function DraftsPage() {
           <button className="btn-sync" onClick={handleSync} disabled={syncing}>
             {syncing ? 'Syncing...' : 'Sync with Sheet'}
           </button>
-          <button className="btn-approve-all" onClick={approveAll}>
-            Approve All Drafts
-          </button>
           <button className="btn-schedule" onClick={() => navigate('/schedule')}>
-            Schedule Approved
+            Schedule
           </button>
         </div>
       </div>
@@ -271,12 +275,6 @@ export default function DraftsPage() {
                 </span>
               </div>
 
-              {draft.screenshotUrl && (
-                <div className="draft-card-screenshot">
-                  <img src={draft.screenshotUrl} alt={`${draft.companyName} screenshot`} />
-                </div>
-              )}
-
               {editingId === draft.id ? (
                 <div className="draft-edit-field">
                   <input
@@ -303,12 +301,6 @@ export default function DraftsPage() {
               )}
 
               <div className="draft-card-actions">
-                <button
-                  className="btn-card-approve"
-                  onClick={() => setDraftStatus(draft.id, 'approved')}
-                >
-                  Approve
-                </button>
                 <button
                   className="btn-card-reject"
                   onClick={() => setDraftStatus(draft.id, 'rejected')}
