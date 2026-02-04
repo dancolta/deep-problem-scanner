@@ -725,14 +725,29 @@ export function registerAllHandlers(): void {
         }
 
         const scheduledTime = new Date(currentScheduledTime);
-        console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${scheduledTime.toISOString()} (interval: +${randomInterval}min)`);
+
+        // Format scheduled time in lead's timezone for readability
+        const formattedTime = scheduledTime.toLocaleString('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).replace(', ', '|');
+        const tzShort = timezone.split('/').pop()?.replace(/_/g, ' ') || timezone;
+        const readableScheduledTime = `${formattedTime} (${tzShort})`;
+
+        console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${readableScheduledTime} (interval: +${randomInterval}min)`);
 
         // Update sheet row with scheduled status
         const rowIndex = rows.indexOf(row);
         if (rowIndex >= 0) {
           sheets.updateRowStatus(spreadsheetId, rowIndex, {
             email_status: 'scheduled',
-            scheduled_time: scheduledTime.toISOString(),
+            scheduled_time: readableScheduledTime,
           } as any).catch((err: any) => console.error('[IPC] Failed to update row:', err));
         }
 
