@@ -9,8 +9,7 @@ RECIPIENT:
 - Domain: {{domain}}
 
 SCAN FINDINGS:
-- Page load time: {{loadTime}}
-- Conversion loss: {{conversionLoss}}
+- Intro metric: {{introMetric}}
 - Number of issues found: {{issueCount}}
 - Hero section issues: {{heroIssues}}
 - Most critical: {{worstProblem}}
@@ -24,7 +23,7 @@ Subject: [3-7 words, reference their main problem]
 
 Hi {{firstName}},
 
-[HOOK: Start directly with load time and conversion impact. Example: "Your homepage takes 7.1 seconds to load, {{conversionLoss}}."]
+[HOOK: {{introHook}}]
 
 Also, your hero section has some {{issueWord}} I've flagged below:
 [IMAGE]
@@ -33,26 +32,13 @@ Want me to walk you through the rest of the findings? Takes 15 minutes.
 
 ---
 
-EXAMPLE (5-8 seconds load time):
+EXAMPLE:
 
 Hi Sarah,
 
-Your homepage takes 7.1 seconds to load, that's likely costing you 30-35% of your conversions before visitors even see your offer.
+{{exampleIntro}}
 
 Also, your hero section has an issue I've flagged below:
-[IMAGE]
-
-Want me to walk you through the rest of the findings? Takes 15 minutes.
-
----
-
-EXAMPLE (12+ seconds load time):
-
-Hi Mike,
-
-Your homepage takes 13.2 seconds to load, that's likely costing you 50%+ of your conversions before visitors even see your offer.
-
-Also, your hero section has some issues I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -62,8 +48,8 @@ Want me to walk you through the rest of the findings? Takes 15 minutes.
 RULES:
 1. Body: 75-100 words max (under 80 ideal). Be concise.
 2. Subject: 3-7 words, specific to their problem
-3. First sentence MUST start with "Your homepage takes X seconds to load" (use exact load time from findings)
-4. First sentence MUST include conversion loss percentage (e.g., "that's likely costing you 30-35% of your conversions before visitors even see your offer")
+3. First sentence MUST follow the intro hook pattern provided
+4. First sentence MUST include the impact statement
 5. NO em dashes. Use commas instead.
 6. Second paragraph MUST be: "Also, your hero section has some {{issueWord}} I've flagged below:"
 7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
@@ -78,25 +64,66 @@ SPACING RULES:
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\nYour homepage takes X seconds to load, {{conversionLoss}}.\\n\\nAlso, your hero section has some {{issueWord}} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi {{firstName}},\\n\\n{{introHook}}\\n\\nAlso, your hero section has some {{issueWord}} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
 }`;
 
 /**
- * Get conversion loss percentage based on load time in seconds
- * Based on industry research on page load times and conversion rates
+ * Industry standard thresholds for PageSpeed metrics
+ * Scores BELOW these thresholds are considered "poor" and can be used in outreach
  */
-function getConversionLoss(loadTimeSeconds: number): string {
-  if (loadTimeSeconds <= 3) {
-    return "that's likely costing you 10-15% of your conversions before visitors even see your offer";
-  } else if (loadTimeSeconds <= 5) {
-    return "that's likely costing you 20-25% of your conversions before visitors even see your offer";
-  } else if (loadTimeSeconds <= 8) {
-    return "that's likely costing you 30-35% of your conversions before visitors even see your offer";
-  } else if (loadTimeSeconds <= 12) {
-    return "that's likely costing you 40-50% of your conversions before visitors even see your offer";
-  } else {
-    return "that's likely costing you 50%+ of your conversions before visitors even see your offer";
-  }
+const INDUSTRY_THRESHOLDS: Record<string, number> = {
+  'Performance Score': 50,      // Below 50 = poor performance
+  'Accessibility Score': 70,    // Below 70 = accessibility issues
+  'SEO Score': 80,              // Below 80 = SEO problems
+  'Best Practices Score': 70,   // Below 70 = best practices issues
+};
+
+/**
+ * Get impact message based on PageSpeed metric and score
+ */
+function getMetricImpact(metricName: string, score: number): string {
+  const impacts: Record<string, string> = {
+    'Performance Score': "that's likely costing you conversions before visitors even see your offer",
+    'Accessibility Score': "that's likely turning away visitors who can't easily use your site",
+    'SEO Score': "that's likely hurting your visibility in search results",
+    'Best Practices Score': "that could be affecting your site's security and user trust",
+  };
+  return impacts[metricName] || "that could be affecting your conversions";
+}
+
+/**
+ * Get intro sentence for a PageSpeed metric
+ */
+function getMetricIntro(metricName: string, score: number): string {
+  const intros: Record<string, string> = {
+    'Performance Score': `Your website scores ${score}/100 on performance`,
+    'Accessibility Score': `Your website scores ${score}/100 on accessibility`,
+    'SEO Score': `Your website scores ${score}/100 on SEO`,
+    'Best Practices Score': `Your website scores ${score}/100 on best practices`,
+  };
+  return intros[metricName] || `Your website scores ${score}/100`;
+}
+
+/**
+ * Find the poorest metric that is BELOW industry threshold
+ * Returns null if all metrics meet standards (are "good")
+ */
+function findPoorestPoorMetric(diagnostics: DiagnosticResult[]): { name: string; score: number; details: string } | null {
+  const pageSpeedMetrics = ['Performance Score', 'Accessibility Score', 'SEO Score', 'Best Practices Score'];
+
+  // Filter to PageSpeed metrics that are BELOW their industry threshold
+  const poorMetrics = diagnostics.filter(d => {
+    if (!pageSpeedMetrics.includes(d.name)) return false;
+    const threshold = INDUSTRY_THRESHOLDS[d.name] || 70;
+    return d.score < threshold;
+  });
+
+  if (poorMetrics.length === 0) return null;
+
+  // Return the worst one
+  return poorMetrics.reduce((poorest, current) =>
+    current.score < poorest.score ? current : poorest
+  );
 }
 
 export function buildEmailPrompt(
@@ -106,8 +133,6 @@ export function buildEmailPrompt(
 ): string {
   const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
   const firstName = context.contactName.split(' ')[0];
-  const loadTime = context.loadTimeSeconds ? `${context.loadTimeSeconds} seconds` : null;
-  const conversionLoss = context.loadTimeSeconds ? getConversionLoss(context.loadTimeSeconds) : "that's likely costing you conversions before visitors even see your offer";
 
   // Extract domain from URL (e.g., "talentflow.com" from "https://www.talentflow.com/page")
   let domain = context.websiteUrl;
@@ -122,6 +147,46 @@ export function buildEmailPrompt(
   const issueCount = context.annotationLabels.length || context.problemCount || 1;
   const issueWord = issueCount === 1 ? 'issue' : 'issues';
 
+  // Parse diagnostics to find PageSpeed scores
+  const parsedDiagnostics = context.diagnosticsSummary
+    .split(' | ')
+    .map(d => {
+      const match = d.match(/^(.+?):\s*\w+\s*\((\d+)\/100\)\s*-\s*(.+)$/);
+      if (match) {
+        const score = parseInt(match[2], 10);
+        return {
+          name: match[1],
+          status: (score >= 90 ? 'pass' : score >= 50 ? 'warning' : 'fail') as 'pass' | 'warning' | 'fail',
+          details: match[3],
+          score,
+        };
+      }
+      return null;
+    })
+    .filter((d): d is DiagnosticResult => d !== null);
+
+  // Find poorest metric that is BELOW industry threshold (genuinely poor)
+  const poorestMetric = findPoorestPoorMetric(parsedDiagnostics);
+
+  // Build intro hook from poorest poor metric
+  let introHook: string;
+  let introMetric: string;
+  let exampleIntro: string;
+
+  if (poorestMetric) {
+    // Use the genuinely poor PageSpeed metric
+    const intro = getMetricIntro(poorestMetric.name, poorestMetric.score);
+    const impact = getMetricImpact(poorestMetric.name, poorestMetric.score);
+    introHook = `${intro}, ${impact}.`;
+    introMetric = `${poorestMetric.name}: ${poorestMetric.score}/100 (below industry threshold)`;
+    exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions before visitors even see your offer.`;
+  } else {
+    // All metrics are good - fallback to hero section focus
+    introHook = `I ran a quick audit on your website and found some conversion opportunities.`;
+    introMetric = `All PageSpeed metrics meet industry standards - focusing on hero section issues`;
+    exampleIntro = `I ran a quick audit on your website and found some conversion opportunities.`;
+  }
+
   // Use custom template or default
   const template = customTemplate || DEFAULT_EMAIL_TEMPLATE;
 
@@ -130,8 +195,9 @@ export function buildEmailPrompt(
     .replace(/\{\{firstName\}\}/g, firstName)
     .replace(/\{\{companyName\}\}/g, context.companyName)
     .replace(/\{\{domain\}\}/g, domain)
-    .replace(/\{\{loadTime\}\}/g, loadTime || 'see diagnostics')
-    .replace(/\{\{conversionLoss\}\}/g, conversionLoss)
+    .replace(/\{\{introHook\}\}/g, introHook)
+    .replace(/\{\{introMetric\}\}/g, introMetric)
+    .replace(/\{\{exampleIntro\}\}/g, exampleIntro)
     .replace(/\{\{issueCount\}\}/g, String(issueCount))
     .replace(/\{\{heroIssues\}\}/g, context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues')
     .replace(/\{\{worstProblem\}\}/g, context.worstProblem)

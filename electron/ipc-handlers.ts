@@ -237,7 +237,8 @@ export function registerAllHandlers(): void {
     IPC_CHANNELS.SCAN_START,
     async (event, { leads, spreadsheetId }: { leads: any[]; spreadsheetId?: string }) => {
       try {
-        // Load settings for API key
+        // Load settings for API keys
+        let pageSpeedApiKey: string | undefined;
         try {
           const settingsPath = path.join(app.getPath('userData'), 'settings.json');
           const settingsContent = await fs.readFile(settingsPath, 'utf-8');
@@ -245,6 +246,10 @@ export function registerAllHandlers(): void {
           if (settings.geminiApiKey) {
             process.env.GEMINI_API_KEY = settings.geminiApiKey;
             console.log('[IPC] Synced GEMINI_API_KEY from settings.json');
+          }
+          if (settings.pageSpeedApiKey) {
+            pageSpeedApiKey = settings.pageSpeedApiKey;
+            console.log('[IPC] Loaded PageSpeed API key from settings.json');
           }
         } catch {
           // settings.json may not exist yet
@@ -257,6 +262,7 @@ export function registerAllHandlers(): void {
         const sheets = await registry.getSheets();
         const gmail = await registry.getAuthenticatedGmail();
         const emailGen = registry.emailGenerator;
+        const pageSpeed = registry.getPageSpeed(pageSpeedApiKey);
 
         const results: any[] = [];
         const window = BrowserWindow.fromWebContents(event.sender);
@@ -283,6 +289,10 @@ export function registerAllHandlers(): void {
           sendPhaseProgress('opening_page', i, lead.website_url);
 
           try {
+            // Start PageSpeed fetch in parallel (runs while we open page and do AI analysis)
+            console.log(`[IPC] Starting PageSpeed fetch for ${lead.website_url}`);
+            const pageSpeedPromise = pageSpeed.getScores(lead.website_url, 'desktop');
+
             // 1. Open page and get viewport screenshot
             console.time(`[IPC] scan-${i}`);
             const session = await scanner.openPageForAnalysis(lead.website_url);
@@ -480,14 +490,35 @@ export function registerAllHandlers(): void {
             }
             console.timeEnd(`[IPC] drive-${i}`);
 
-            // 5. Generate email with issue details (using verified data)
+            // 5. Generate email with issue details (using PageSpeed scores)
             sendPhaseProgress('generating_email', i, lead.website_url);
             console.time(`[IPC] email-${i}`);
+
+            // Wait for PageSpeed results (started in parallel earlier)
+            console.log(`[IPC] ========== PAGESPEED DEBUG ==========`);
+            const pageSpeedResult = await pageSpeedPromise;
+            console.log(`[IPC] PageSpeed result:`, JSON.stringify(pageSpeedResult, null, 2));
+            let diagnosticsForEmail = session.diagnostics;
+
+            if (pageSpeedResult.success && pageSpeedResult.scores) {
+              // Use PageSpeed scores as diagnostics
+              diagnosticsForEmail = pageSpeed.scoresToDiagnostics(pageSpeedResult.scores);
+              console.log(`[IPC] ✅ USING PAGESPEED SCORES:`);
+              console.log(`[IPC]   Performance: ${pageSpeedResult.scores.performance}/100`);
+              console.log(`[IPC]   Accessibility: ${pageSpeedResult.scores.accessibility}/100`);
+              console.log(`[IPC]   SEO: ${pageSpeedResult.scores.seo}/100`);
+              console.log(`[IPC]   Best Practices: ${pageSpeedResult.scores.bestPractices}/100`);
+            } else {
+              console.log(`[IPC] ❌ PAGESPEED FAILED: ${pageSpeedResult.error}`);
+              console.log(`[IPC] Using fallback scanner diagnostics instead`);
+            }
+            console.log(`[IPC] ======================================`);
+
             const promptContext = buildPromptContext({
               companyName: lead.company_name,
               contactName: lead.contact_name,
               websiteUrl: lead.website_url,
-              diagnostics: session.diagnostics,
+              diagnostics: diagnosticsForEmail,
               screenshotUrl: driveResults[0]?.directLink || '',
               annotationLabels: annotationLabels,
             });
@@ -514,7 +545,7 @@ export function registerAllHandlers(): void {
               contact_email: lead.contact_email,
               scan_status: 'SUCCESS',
               screenshot_url: driveResults.map(r => r.directLink).join(' | '),
-              diagnostics_summary: buildDiagnosticsSummary(session.diagnostics),
+              diagnostics_summary: buildDiagnosticsSummary(diagnosticsForEmail),
               email_subject: email.subject,
               email_body: email.body,
               email_status: 'draft' as const,

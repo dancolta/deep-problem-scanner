@@ -8,6 +8,7 @@ interface SavedSettings {
   concurrency?: number;
   timezone?: string;
   geminiApiKey?: string;
+  pageSpeedApiKey?: string;
   customEmailTemplate?: string;
 }
 
@@ -20,6 +21,8 @@ export default function SetupPage() {
   // Settings state
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [pageSpeedApiKey, setPageSpeedApiKey] = useState('');
+  const [showPageSpeedKey, setShowPageSpeedKey] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetId, setSheetId] = useState('');
   const [concurrency, setConcurrency] = useState(2);
@@ -102,6 +105,9 @@ export default function SetupPage() {
           setGeminiApiKey(s.geminiApiKey);
           setGeminiStatus('valid'); // Was saved previously, assume valid
         }
+        if (s.pageSpeedApiKey) {
+          setPageSpeedApiKey(s.pageSpeedApiKey);
+        }
         if (s.customEmailTemplate) {
           setEmailTemplate(s.customEmailTemplate);
         } else {
@@ -179,6 +185,7 @@ export default function SetupPage() {
         concurrency,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         geminiApiKey,
+        pageSpeedApiKey,
       });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -260,6 +267,29 @@ export default function SetupPage() {
               <span style={{ color: '#ef4444' }}>Invalid API key</span>
             </div>
           )}
+        </div>
+
+        {/* PageSpeed API Key */}
+        <div className="setup-card">
+          <h3>PageSpeed API Key</h3>
+          <p className="hint-text" style={{ marginBottom: '10px' }}>
+            Required for website performance scores. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>Get API Key</a>
+          </p>
+          <div className="input-group">
+            <input
+              type={showPageSpeedKey ? 'text' : 'password'}
+              value={pageSpeedApiKey}
+              onChange={(e) => setPageSpeedApiKey(e.target.value)}
+              placeholder="AIza..."
+              className="input"
+            />
+            <button className="btn btn--icon" onClick={() => setShowPageSpeedKey(!showPageSpeedKey)}>
+              {showPageSpeedKey ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <p className="hint-text" style={{ marginTop: '8px' }}>
+            Enable "PageSpeed Insights API" in Google Cloud Console for this key.
+          </p>
         </div>
 
         {/* Google Sheet URL */}
