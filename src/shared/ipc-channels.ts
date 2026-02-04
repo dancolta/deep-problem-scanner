@@ -40,6 +40,9 @@ export const IPC_CHANNELS = {
   // Gemini
   GEMINI_TEST_KEY: 'gemini:test-key',
 
+  // PageSpeed
+  PAGESPEED_TEST_KEY: 'pagespeed:test-key',
+
   SHEETS_UPDATE_ROW: 'sheets:update-row',
 
   // Sheet test

@@ -3,6 +3,13 @@ import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './
 
 export const DEFAULT_EMAIL_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
 
+⚠️ STRICT CONSTRAINT - WILL BE VALIDATED:
+The word "hero" is FORBIDDEN in the first paragraph. If your first paragraph contains "hero", the email will be rejected.
+The word "hero" may ONLY appear in the second paragraph (the {{secondParagraph}} line).
+
+❌ WRONG: "I analyzed your site and spotted conversion gaps in your hero section..."
+✅ CORRECT: "I analyzed your site and spotted some conversion gaps that could be impacting your results..."
+
 RECIPIENT:
 - First name: {{firstName}}
 - Company: {{companyName}}
@@ -25,7 +32,7 @@ Hi {{firstName}},
 
 [HOOK: {{introHook}}]
 
-Also, your hero section has some {{issueWord}} I've flagged below:
+{{secondParagraph}}
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -38,7 +45,7 @@ Hi Sarah,
 
 {{exampleIntro}}
 
-Also, your hero section has an issue I've flagged below:
+{{secondParagraph}}
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -47,24 +54,25 @@ Want me to walk you through the rest of the findings? Takes 15 minutes.
 
 RULES:
 1. Body: 75-100 words max (under 80 ideal). Be concise.
-2. Subject: 3-7 words, specific to their problem
+2. Subject: 3-7 words, reference their main problem
 3. First sentence MUST follow the intro hook pattern provided
-4. First sentence MUST include the impact statement
+4. First sentence MUST include the impact statement if a metric is provided
 5. NO em dashes. Use commas instead.
-6. Second paragraph MUST be: "Also, your hero section has some {{issueWord}} I've flagged below:"
+6. Second paragraph MUST be exactly: "{{secondParagraph}}"
 7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
 8. NO signature - Gmail will add it automatically
 9. Tone: Direct, expert, helpful
 10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
+11. CRITICAL: The first paragraph must NEVER contain the word "hero". The word "hero" can ONLY appear in the second paragraph.
 
 SPACING RULES:
-- After "hero section:" → single newline → [IMAGE] (NO blank line between text and image)
+- After second paragraph → single newline → [IMAGE] (NO blank line between text and image)
 - After [IMAGE] → blank line → CTA (one blank line after image)
 
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\n{{introHook}}\\n\\nAlso, your hero section has some {{issueWord}} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi {{firstName}},\\n\\n{{introHook}}\\n\\n{{secondParagraph}}\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
 }`;
 
 /**
@@ -72,10 +80,10 @@ FORMAT: Respond ONLY with valid JSON:
  * Scores BELOW these thresholds are considered "poor" and can be used in outreach
  */
 const INDUSTRY_THRESHOLDS: Record<string, number> = {
-  'Performance Score': 50,      // Below 50 = poor performance
-  'Accessibility Score': 70,    // Below 70 = accessibility issues
-  'SEO Score': 80,              // Below 80 = SEO problems
-  'Best Practices Score': 70,   // Below 70 = best practices issues
+  'Performance Score': 80,      // Below 80 = flag it
+  'Accessibility Score': 80,    // Below 80 = flag it
+  'SEO Score': 80,              // Below 80 = flag it
+  'Best Practices Score': 80,   // Below 80 = flag it
 };
 
 /**
@@ -172,6 +180,7 @@ export function buildEmailPrompt(
   let introHook: string;
   let introMetric: string;
   let exampleIntro: string;
+  let secondParagraph: string;
 
   if (poorestMetric) {
     // Use the genuinely poor PageSpeed metric
@@ -180,11 +189,13 @@ export function buildEmailPrompt(
     introHook = `${intro}, ${impact}.`;
     introMetric = `${poorestMetric.name}: ${poorestMetric.score}/100 (below industry threshold)`;
     exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions before visitors even see your offer.`;
+    secondParagraph = `Also, your hero section has some ${issueWord} I've flagged below:`;
   } else {
-    // All metrics are good - fallback to hero section focus
-    introHook = `I ran a quick audit on your website and found some conversion opportunities.`;
+    // All metrics are good - fallback (no hero mention in intro, save it for second paragraph)
+    introHook = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
     introMetric = `All PageSpeed metrics meet industry standards - focusing on hero section issues`;
-    exampleIntro = `I ran a quick audit on your website and found some conversion opportunities.`;
+    exampleIntro = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
+    secondParagraph = `Your hero section has some ${issueWord} I've flagged below:`;
   }
 
   // Use custom template or default
@@ -198,6 +209,7 @@ export function buildEmailPrompt(
     .replace(/\{\{introHook\}\}/g, introHook)
     .replace(/\{\{introMetric\}\}/g, introMetric)
     .replace(/\{\{exampleIntro\}\}/g, exampleIntro)
+    .replace(/\{\{secondParagraph\}\}/g, secondParagraph)
     .replace(/\{\{issueCount\}\}/g, String(issueCount))
     .replace(/\{\{heroIssues\}\}/g, context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues')
     .replace(/\{\{worstProblem\}\}/g, context.worstProblem)

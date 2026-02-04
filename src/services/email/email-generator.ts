@@ -47,6 +47,9 @@ export class EmailGenerator {
     // Normalize spacing around [IMAGE]: no blank line before, one blank line after
     body = this.normalizeImageSpacing(body);
 
+    // Fix: Remove "hero" from first paragraph (post-processing enforcement)
+    body = this.removeHeroFromFirstParagraph(body);
+
     const wordCount = countWords(body);
     if (wordCount > opts.maxBodyWords) {
       body = truncateToWordLimit(body, opts.maxBodyWords);
@@ -91,6 +94,43 @@ export class EmailGenerator {
       console.error('[EmailGenerator] API call failed:', error);
       return null;
     }
+  }
+
+  /**
+   * Remove any mention of "hero" from the first paragraph.
+   * This is a post-processing enforcement since the AI sometimes ignores the rule.
+   */
+  private removeHeroFromFirstParagraph(body: string): string {
+    // Split into paragraphs
+    const paragraphs = body.split(/\n\n+/);
+
+    if (paragraphs.length < 2) return body;
+
+    // First paragraph is "Hi Name," - second is the intro we need to fix
+    let introParagraph = paragraphs[1];
+
+    // Check if "hero" appears in the intro paragraph
+    if (introParagraph.toLowerCase().includes('hero')) {
+      // Replace common patterns that mention hero
+      introParagraph = introParagraph
+        .replace(/\s*in your hero section/gi, '')
+        .replace(/\s*on your hero section/gi, '')
+        .replace(/\s*with your hero section/gi, '')
+        .replace(/\s*,?\s*including your hero section/gi, '')
+        .replace(/\s*,?\s*especially in your hero section/gi, '')
+        .replace(/\s*,?\s*particularly in your hero section/gi, '')
+        .replace(/\s*hero section\s*/gi, ' ')
+        .replace(/\s*hero\s*/gi, ' ')
+        .replace(/\s{2,}/g, ' ')  // Clean up double spaces
+        .replace(/\s+\./g, '.')   // Clean up space before period
+        .replace(/\s+,/g, ',')    // Clean up space before comma
+        .trim();
+
+      paragraphs[1] = introParagraph;
+      return paragraphs.join('\n\n');
+    }
+
+    return body;
   }
 
   /**

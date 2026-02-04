@@ -214,6 +214,47 @@ export function registerAllHandlers(): void {
     }
   });
 
+  // --- PageSpeed ---
+  ipcMain.handle(IPC_CHANNELS.PAGESPEED_TEST_KEY, async (_event, apiKey: string) => {
+    try {
+      // Test with a simple, fast-loading page
+      const testUrl = 'https://example.com';
+      const params = new URLSearchParams({
+        url: testUrl,
+        strategy: 'desktop',
+        category: 'performance',
+        key: apiKey,
+      });
+
+      const response = await fetch(
+        `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        const errorMsg = errorData.error?.message || `API returned ${response.status}`;
+        if (response.status === 400 && errorMsg.includes('API key')) {
+          return { success: false, error: 'Invalid API key' };
+        }
+        if (response.status === 403) {
+          return { success: false, error: 'API key not authorized for PageSpeed Insights API' };
+        }
+        return { success: false, error: errorMsg };
+      }
+
+      const data = await response.json();
+      const score = data.lighthouseResult?.categories?.performance?.score;
+
+      if (score !== undefined) {
+        return { success: true, score: Math.round(score * 100) };
+      }
+
+      return { success: false, error: 'Invalid response from PageSpeed API' };
+    } catch (error: any) {
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
   // --- Sheets test ---
   ipcMain.handle(IPC_CHANNELS.SHEETS_TEST, async (_event, spreadsheetId: string) => {
     try {
@@ -501,6 +542,30 @@ export function registerAllHandlers(): void {
             let diagnosticsForEmail = session.diagnostics;
 
             if (pageSpeedResult.success && pageSpeedResult.scores) {
+              // Check for 0 performance score - indicates something failed, skip this lead
+              if (pageSpeedResult.scores.performance === 0) {
+                console.log(`[IPC] ⚠️ SKIPPING LEAD: Performance score is 0 (likely a failed scan)`);
+                await scanner.closePageSession(session);
+                results.push({
+                  lead,
+                  scanStatus: 'SKIPPED',
+                  sheetRow: {
+                    company_name: lead.company_name,
+                    website_url: lead.website_url,
+                    contact_name: lead.contact_name,
+                    contact_email: lead.contact_email,
+                    scan_status: 'SKIPPED',
+                    screenshot_url: '',
+                    diagnostics_summary: 'PageSpeed returned 0 score - scan failed',
+                    email_subject: '',
+                    email_body: '',
+                    email_status: 'skip' as const,
+                  },
+                  issueCount: 0,
+                });
+                continue;
+              }
+
               // Use PageSpeed scores as diagnostics
               diagnosticsForEmail = pageSpeed.scoresToDiagnostics(pageSpeedResult.scores);
               console.log(`[IPC] ✅ USING PAGESPEED SCORES:`);

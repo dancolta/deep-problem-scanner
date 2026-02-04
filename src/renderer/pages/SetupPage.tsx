@@ -28,6 +28,7 @@ export default function SetupPage() {
   const [concurrency, setConcurrency] = useState(2);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [geminiStatus, setGeminiStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
+  const [pageSpeedStatus, setPageSpeedStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
   const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
   const [sheetError, setSheetError] = useState<string | null>(null);
 
@@ -107,6 +108,7 @@ export default function SetupPage() {
         }
         if (s.pageSpeedApiKey) {
           setPageSpeedApiKey(s.pageSpeedApiKey);
+          setPageSpeedStatus('valid'); // Was saved previously, assume valid
         }
         if (s.customEmailTemplate) {
           setEmailTemplate(s.customEmailTemplate);
@@ -156,6 +158,17 @@ export default function SetupPage() {
       setGeminiStatus(result?.success ? 'valid' : 'invalid');
     } catch {
       setGeminiStatus('invalid');
+    }
+  }
+
+  async function handleTestPageSpeed() {
+    if (!pageSpeedApiKey) return;
+    setPageSpeedStatus('testing');
+    try {
+      const result = await ipc<{ success: boolean; score?: number; error?: string }>(IPC_CHANNELS.PAGESPEED_TEST_KEY, pageSpeedApiKey);
+      setPageSpeedStatus(result?.success ? 'valid' : 'invalid');
+    } catch {
+      setPageSpeedStatus('invalid');
     }
   }
 
@@ -279,14 +292,33 @@ export default function SetupPage() {
             <input
               type={showPageSpeedKey ? 'text' : 'password'}
               value={pageSpeedApiKey}
-              onChange={(e) => setPageSpeedApiKey(e.target.value)}
+              onChange={(e) => { setPageSpeedApiKey(e.target.value); setPageSpeedStatus('untested'); }}
               placeholder="AIza..."
               className="input"
             />
             <button className="btn btn--icon" onClick={() => setShowPageSpeedKey(!showPageSpeedKey)}>
               {showPageSpeedKey ? 'Hide' : 'Show'}
             </button>
+            <button
+              className="btn btn--outline"
+              onClick={handleTestPageSpeed}
+              disabled={!pageSpeedApiKey || pageSpeedStatus === 'testing'}
+            >
+              {pageSpeedStatus === 'testing' ? 'Testing...' : 'Test Key'}
+            </button>
           </div>
+          {pageSpeedStatus === 'valid' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--green" />
+              <span style={{ color: '#10b981' }}>Valid API key</span>
+            </div>
+          )}
+          {pageSpeedStatus === 'invalid' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--red" />
+              <span style={{ color: '#ef4444' }}>Invalid API key - enable PageSpeed Insights API in Google Cloud</span>
+            </div>
+          )}
           <p className="hint-text" style={{ marginTop: '8px' }}>
             Enable "PageSpeed Insights API" in Google Cloud Console for this key.
           </p>
