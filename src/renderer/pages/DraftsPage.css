@@ -220,16 +220,6 @@
   color: #e94560;
 }
 
-.draft-card-actions .btn-card-reject {
-  border-color: #e94560;
-  color: #e94560;
-}
-
-.draft-card-actions .btn-card-reject:hover {
-  background: #e94560;
-  color: #fff;
-}
-
 /* Edit Mode */
 .draft-edit-field input,
 .draft-edit-field textarea {
