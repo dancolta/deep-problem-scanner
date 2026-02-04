@@ -1,5 +1,69 @@
 import { DiagnosticResult } from '../scanner/types';
-import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
+import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS, IntroHook } from './types';
+
+/**
+ * Metrics to EXCLUDE from intro hook selection
+ * - LCP: Now typically shows good scores, not useful for cold outreach
+ * - Broken Links: Not impactful enough for intro hook
+ */
+const EXCLUDED_INTRO_METRICS = [
+  'LCP (Visual Load Time)',
+  'Page Speed',  // Legacy name
+  'Broken Links',
+];
+
+/**
+ * Map diagnostic names to intro hook templates
+ * Structure: [observation, impact]
+ */
+const METRIC_HOOK_TEMPLATES: Record<string, { observation: string; impact: string }> = {
+  'Mobile Friendliness': {
+    observation: "Your site isn't optimized for mobile",
+    impact: "that's likely costing you 50%+ of visitors who browse on their phones",
+  },
+  'CTA Analysis': {
+    observation: "Your homepage doesn't have a clear call-to-action",
+    impact: "that's likely costing you conversions from visitors who don't know what to do next",
+  },
+  'SEO Basics': {
+    observation: "Your homepage has SEO issues",
+    impact: "that's likely hurting your visibility in search results",
+  },
+};
+
+/**
+ * Find the best poor metric to use as intro hook
+ * Excludes LCP and Broken Links, prioritizes failed metrics over warnings
+ */
+function findIntroHook(diagnostics: DiagnosticResult[]): IntroHook | undefined {
+  // Filter to eligible metrics (not LCP, not Broken Links)
+  const eligibleMetrics = diagnostics.filter(
+    d => !EXCLUDED_INTRO_METRICS.includes(d.name)
+  );
+
+  // Find failed metrics first (most impactful)
+  const failedMetrics = eligibleMetrics.filter(d => d.status === 'fail');
+  const warningMetrics = eligibleMetrics.filter(d => d.status === 'warning');
+
+  // Sort by score (lowest = worst = best for outreach)
+  const sortedPoorMetrics = [...failedMetrics, ...warningMetrics].sort(
+    (a, b) => a.score - b.score
+  );
+
+  // Find first metric that has a hook template
+  for (const metric of sortedPoorMetrics) {
+    const template = METRIC_HOOK_TEMPLATES[metric.name];
+    if (template) {
+      return {
+        metricName: metric.name,
+        observation: template.observation,
+        impact: template.impact,
+      };
+    }
+  }
+
+  return undefined;
+}
 
 export const DEFAULT_EMAIL_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
 
@@ -9,12 +73,13 @@ RECIPIENT:
 - Domain: {{domain}}
 
 SCAN FINDINGS:
-- Page load time: {{loadTime}}
-- Conversion loss: {{conversionLoss}}
 - Number of issues found: {{issueCount}}
 - Hero section issues: {{heroIssues}}
 - Most critical: {{worstProblem}}
 - Full diagnostics: {{diagnosticsSummary}}
+
+INTRO HOOK (use this if provided):
+{{introHookSection}}
 
 ---
 
@@ -24,52 +89,29 @@ Subject: [3-7 words, reference their main problem]
 
 Hi {{firstName}},
 
-[HOOK: Start directly with load time and conversion impact. Example: "Your homepage takes 7.1 seconds to load, {{conversionLoss}}."]
+{{introInstructions}}
 
-Also, your hero section has some {{issueWord}} I've flagged below:
+Your hero section has some {{issueWord}} I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
 
 ---
 
-EXAMPLE (5-8 seconds load time):
-
-Hi Sarah,
-
-Your homepage takes 7.1 seconds to load, that's likely costing you 30-35% of your conversions before visitors even see your offer.
-
-Also, your hero section has an issue I've flagged below:
-[IMAGE]
-
-Want me to walk you through the rest of the findings? Takes 15 minutes.
-
----
-
-EXAMPLE (12+ seconds load time):
-
-Hi Mike,
-
-Your homepage takes 13.2 seconds to load, that's likely costing you 50%+ of your conversions before visitors even see your offer.
-
-Also, your hero section has some issues I've flagged below:
-[IMAGE]
-
-Want me to walk you through the rest of the findings? Takes 15 minutes.
+{{exampleSection}}
 
 ---
 
 RULES:
 1. Body: 75-100 words max (under 80 ideal). Be concise.
 2. Subject: 3-7 words, specific to their problem
-3. First sentence MUST start with "Your homepage takes X seconds to load" (use exact load time from findings)
-4. First sentence MUST include conversion loss percentage (e.g., "that's likely costing you 30-35% of your conversions before visitors even see your offer")
-5. NO em dashes. Use commas instead.
-6. Second paragraph MUST be: "Also, your hero section has some {{issueWord}} I've flagged below:"
-7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
-8. NO signature - Gmail will add it automatically
-9. Tone: Direct, expert, helpful
-10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
+3. {{introRule}}
+4. NO em dashes. Use commas instead.
+5. {{heroSectionRule}}
+6. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
+7. NO signature - Gmail will add it automatically
+8. Tone: Direct, expert, helpful
+9. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
 
 SPACING RULES:
 - After "hero section:" → single newline → [IMAGE] (NO blank line between text and image)
@@ -78,26 +120,8 @@ SPACING RULES:
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\nYour homepage takes X seconds to load, {{conversionLoss}}.\\n\\nAlso, your hero section has some {{issueWord}} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "{{exampleBody}}"
 }`;
-
-/**
- * Get conversion loss percentage based on load time in seconds
- * Based on industry research on page load times and conversion rates
- */
-function getConversionLoss(loadTimeSeconds: number): string {
-  if (loadTimeSeconds <= 3) {
-    return "that's likely costing you 10-15% of your conversions before visitors even see your offer";
-  } else if (loadTimeSeconds <= 5) {
-    return "that's likely costing you 20-25% of your conversions before visitors even see your offer";
-  } else if (loadTimeSeconds <= 8) {
-    return "that's likely costing you 30-35% of your conversions before visitors even see your offer";
-  } else if (loadTimeSeconds <= 12) {
-    return "that's likely costing you 40-50% of your conversions before visitors even see your offer";
-  } else {
-    return "that's likely costing you 50%+ of your conversions before visitors even see your offer";
-  }
-}
 
 export function buildEmailPrompt(
   context: PromptContext,
@@ -106,8 +130,6 @@ export function buildEmailPrompt(
 ): string {
   const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
   const firstName = context.contactName.split(' ')[0];
-  const loadTime = context.loadTimeSeconds ? `${context.loadTimeSeconds} seconds` : null;
-  const conversionLoss = context.loadTimeSeconds ? getConversionLoss(context.loadTimeSeconds) : "that's likely costing you conversions before visitors even see your offer";
 
   // Extract domain from URL (e.g., "talentflow.com" from "https://www.talentflow.com/page")
   let domain = context.websiteUrl;
@@ -122,6 +144,51 @@ export function buildEmailPrompt(
   const issueCount = context.annotationLabels.length || context.problemCount || 1;
   const issueWord = issueCount === 1 ? 'issue' : 'issues';
 
+  // Build dynamic intro sections based on whether we have a hook
+  const hasIntroHook = !!context.introHook;
+
+  let introHookSection: string;
+  let introInstructions: string;
+  let introRule: string;
+  let heroSectionRule: string;
+  let exampleSection: string;
+  let exampleBody: string;
+
+  if (hasIntroHook) {
+    // We have a poor metric to use as intro
+    const hook = context.introHook!;
+    introHookSection = `Metric: ${hook.metricName}\nObservation: ${hook.observation}\nImpact: ${hook.impact}`;
+    introInstructions = `[HOOK: Start with the metric observation and impact. Example: "${hook.observation}, ${hook.impact}."]`;
+    introRule = `First sentence MUST follow this pattern: "${hook.observation}, ${hook.impact}."`;
+    heroSectionRule = `Second paragraph MUST start with: "Your hero section has some {{issueWord}} I've flagged below:"`;
+    exampleSection = `EXAMPLE:
+
+Hi Sarah,
+
+${hook.observation}, ${hook.impact}.
+
+Your hero section has an issue I've flagged below:
+[IMAGE]
+
+Want me to walk you through the rest of the findings? Takes 15 minutes.`;
+    exampleBody = `Hi {{firstName}},\\n\\n${hook.observation}, ${hook.impact}.\\n\\nYour hero section has some {{issueWord}} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes.`;
+  } else {
+    // No poor metrics, skip intro and go straight to hero section
+    introHookSection = `No poor metrics detected. Skip intro and focus on hero section issues.`;
+    introInstructions = `[NO INTRO - Start directly with hero section issues]`;
+    introRule = `NO intro sentence. Start directly with hero section.`;
+    heroSectionRule = `First paragraph MUST be: "Your hero section has some {{issueWord}} I've flagged below:"`;
+    exampleSection = `EXAMPLE (no intro, straight to hero):
+
+Hi Sarah,
+
+Your hero section has an issue I've flagged below:
+[IMAGE]
+
+Want me to walk you through the rest of the findings? Takes 15 minutes.`;
+    exampleBody = `Hi {{firstName}},\\n\\nYour hero section has some {{issueWord}} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes.`;
+  }
+
   // Use custom template or default
   const template = customTemplate || DEFAULT_EMAIL_TEMPLATE;
 
@@ -130,13 +197,17 @@ export function buildEmailPrompt(
     .replace(/\{\{firstName\}\}/g, firstName)
     .replace(/\{\{companyName\}\}/g, context.companyName)
     .replace(/\{\{domain\}\}/g, domain)
-    .replace(/\{\{loadTime\}\}/g, loadTime || 'see diagnostics')
-    .replace(/\{\{conversionLoss\}\}/g, conversionLoss)
     .replace(/\{\{issueCount\}\}/g, String(issueCount))
     .replace(/\{\{heroIssues\}\}/g, context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues')
     .replace(/\{\{worstProblem\}\}/g, context.worstProblem)
     .replace(/\{\{diagnosticsSummary\}\}/g, context.diagnosticsSummary)
-    .replace(/\{\{issueWord\}\}/g, issueWord);
+    .replace(/\{\{issueWord\}\}/g, issueWord)
+    .replace(/\{\{introHookSection\}\}/g, introHookSection)
+    .replace(/\{\{introInstructions\}\}/g, introInstructions)
+    .replace(/\{\{introRule\}\}/g, introRule)
+    .replace(/\{\{heroSectionRule\}\}/g, heroSectionRule)
+    .replace(/\{\{exampleSection\}\}/g, exampleSection)
+    .replace(/\{\{exampleBody\}\}/g, exampleBody);
 }
 
 export function buildDiagnosticsSummary(diagnostics: DiagnosticResult[]): string {
@@ -163,15 +234,20 @@ export function buildPromptContext(params: {
     : warningDiagnostics.sort((a, b) => a.score - b.score)[0]
     || params.diagnostics[0];
 
-  // Extract load time from Page Speed diagnostic
-  const pageSpeedDiag = params.diagnostics.find(d => d.name === 'Page Speed');
+  // Extract load time from LCP diagnostic (kept for backwards compatibility)
+  const lcpDiag = params.diagnostics.find(d =>
+    d.name === 'LCP (Visual Load Time)' || d.name === 'Page Speed'
+  );
   let loadTimeSeconds: number | undefined;
-  if (pageSpeedDiag?.details) {
-    const match = pageSpeedDiag.details.match(/(\d+\.?\d*)\s*s/);
+  if (lcpDiag?.details) {
+    const match = lcpDiag.details.match(/(\d+\.?\d*)\s*s/);
     if (match) {
       loadTimeSeconds = parseFloat(match[1]);
     }
   }
+
+  // Find best poor metric for intro hook (excludes LCP and Broken Links)
+  const introHook = findIntroHook(params.diagnostics);
 
   return {
     companyName: params.companyName,
@@ -183,6 +259,7 @@ export function buildPromptContext(params: {
     problemCount: failedDiagnostics.length + warningDiagnostics.length,
     worstProblem: worstProblem ? `${worstProblem.name} (${worstProblem.details})` : 'general improvements needed',
     loadTimeSeconds,
+    introHook,
   };
 }
 

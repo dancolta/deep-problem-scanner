@@ -1,3 +1,9 @@
+export interface IntroHook {
+  metricName: string;
+  observation: string;  // e.g., "Your site isn't mobile-friendly"
+  impact: string;       // e.g., "that's likely costing you 50%+ of mobile visitors"
+}
+
 export interface PromptContext {
   companyName: string;
   contactName: string;
@@ -7,7 +13,8 @@ export interface PromptContext {
   annotationLabels: string[];
   problemCount: number;
   worstProblem: string;
-  loadTimeSeconds?: number; // Page load time for primary hook
+  loadTimeSeconds?: number; // Page load time (kept for backwards compatibility)
+  introHook?: IntroHook;    // Dynamic intro hook based on poor metrics
 }
 
 export interface GeneratedEmail {
