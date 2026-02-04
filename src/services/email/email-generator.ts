@@ -124,25 +124,25 @@ export class EmailGenerator {
     const issueCount = context.annotationLabels.length || context.problemCount || 1;
     const issueWord = issueCount === 1 ? 'issue' : 'issues';
 
-    // Get bounce impact based on load time
-    const getBounceImpact = (seconds: number): string => {
-      if (seconds <= 3) return 'which keeps most visitors engaged';
-      if (seconds <= 5) return 'that typically bounces 20-25% of visitors before they see your offer';
-      if (seconds <= 8) return 'that typically bounces 30-35% of visitors before they see your offer';
-      if (seconds <= 12) return 'that typically bounces 40%+ of visitors before they see your offer';
-      return 'that typically bounces 50%+ of visitors before they see your offer';
+    // Get conversion loss percentage based on load time
+    const getConversionLoss = (seconds: number): string => {
+      if (seconds <= 3) return "that's likely costing you 10-15% of your conversions before visitors even see your offer";
+      if (seconds <= 5) return "that's likely costing you 20-25% of your conversions before visitors even see your offer";
+      if (seconds <= 8) return "that's likely costing you 30-35% of your conversions before visitors even see your offer";
+      if (seconds <= 12) return "that's likely costing you 40-50% of your conversions before visitors even see your offer";
+      return "that's likely costing you 50%+ of your conversions before visitors even see your offer";
     };
 
-    // Build body with load time and bounce impact
+    // Build body with load time and conversion impact
     const loadTimeText = context.loadTimeSeconds
-      ? `Your site takes ${context.loadTimeSeconds} seconds to load, ${getBounceImpact(context.loadTimeSeconds)}.`
+      ? `Your homepage takes ${context.loadTimeSeconds} seconds to load, ${getConversionLoss(context.loadTimeSeconds)}.`
       : `I found ${context.problemCount} area${context.problemCount !== 1 ? 's' : ''} that could be improved.`;
 
     const body = `Hi ${firstName},
 
-I ran a diagnostic on ${domain}. ${loadTimeText}
+${loadTimeText}
 
-Also, here are some ${issueWord} I've identified on your hero section:
+Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.`;

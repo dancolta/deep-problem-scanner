@@ -2,20 +2,20 @@ import { DiagnosticResult } from '../scanner/types';
 import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
 
 /**
- * Get bounce rate impact text based on load time in seconds
- * Based on industry research on page load times and bounce rates
+ * Get conversion loss percentage based on load time in seconds
+ * Based on industry research on page load times and conversion rates
  */
-function getBounceImpact(loadTimeSeconds: number): string {
+function getConversionLoss(loadTimeSeconds: number): string {
   if (loadTimeSeconds <= 3) {
-    return 'which keeps most visitors engaged';
+    return "that's likely costing you 10-15% of your conversions before visitors even see your offer";
   } else if (loadTimeSeconds <= 5) {
-    return 'that typically bounces 20-25% of visitors before they see your offer';
+    return "that's likely costing you 20-25% of your conversions before visitors even see your offer";
   } else if (loadTimeSeconds <= 8) {
-    return 'that typically bounces 30-35% of visitors before they see your offer';
+    return "that's likely costing you 30-35% of your conversions before visitors even see your offer";
   } else if (loadTimeSeconds <= 12) {
-    return 'that typically bounces 40%+ of visitors before they see your offer';
+    return "that's likely costing you 40-50% of your conversions before visitors even see your offer";
   } else {
-    return 'that typically bounces 50%+ of visitors before they see your offer';
+    return "that's likely costing you 50%+ of your conversions before visitors even see your offer";
   }
 }
 
@@ -26,7 +26,7 @@ export function buildEmailPrompt(
   const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
   const firstName = context.contactName.split(' ')[0];
   const loadTime = context.loadTimeSeconds ? `${context.loadTimeSeconds} seconds` : null;
-  const bounceImpact = context.loadTimeSeconds ? getBounceImpact(context.loadTimeSeconds) : 'that may be costing you conversions';
+  const conversionLoss = context.loadTimeSeconds ? getConversionLoss(context.loadTimeSeconds) : "that's likely costing you conversions before visitors even see your offer";
 
   // Extract domain from URL (e.g., "talentflow.com" from "https://www.talentflow.com/page")
   let domain = context.websiteUrl;
@@ -50,7 +50,7 @@ RECIPIENT:
 
 SCAN FINDINGS:
 - Page load time: ${loadTime || 'see diagnostics'}
-- Bounce impact: ${bounceImpact}
+- Conversion loss: ${conversionLoss}
 - Number of issues found: ${issueCount}
 - Hero section issues: ${context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues'}
 - Most critical: ${context.worstProblem}
@@ -64,22 +64,22 @@ Subject: [3-7 words, reference their main problem]
 
 Hi ${firstName},
 
-[HOOK: Start with "I ran a diagnostic on ${domain}." Then state load time + bounce impact. Example: "Your site takes 7.1 seconds to load, ${bounceImpact}."]
+[HOOK: Start directly with load time and conversion impact. Example: "Your homepage takes 7.1 seconds to load, ${conversionLoss}."]
 
-Also, here are some ${issueWord} I've identified on your hero section:
+Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
 
 ---
 
-EXAMPLE (7+ seconds load time):
+EXAMPLE (5-8 seconds load time):
 
 Hi Sarah,
 
-I ran a diagnostic on talentflow.com. Your site takes 7.1 seconds to load, that typically bounces 40%+ of visitors before they see your offer.
+Your homepage takes 7.1 seconds to load, that's likely costing you 30-35% of your conversions before visitors even see your offer.
 
-Also, here is an issue I've identified on your hero section:
+Also, your hero section has an issue I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -90,9 +90,9 @@ EXAMPLE (12+ seconds load time):
 
 Hi Mike,
 
-I ran a diagnostic on shopbright.com. Your site takes 13.2 seconds to load, that typically bounces 50%+ of visitors before they see your offer.
+Your homepage takes 13.2 seconds to load, that's likely costing you 50%+ of your conversions before visitors even see your offer.
 
-Also, here are some issues I've identified on your hero section:
+Also, your hero section has some issues I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -102,15 +102,14 @@ Want me to walk you through the rest of the findings? Takes 15 minutes.
 RULES:
 1. Body: 75-100 words max (under 80 ideal). Be concise.
 2. Subject: 3-7 words, specific to their problem
-3. MUST use domain only (${domain}), NOT full URL
-4. MUST include "I ran a diagnostic on {domain}." in first sentence
-5. MUST include load time in seconds AND bounce impact (e.g., "takes X seconds to load, that typically bounces Y% of visitors before they see your offer")
-6. NO em dashes. Use commas instead.
-7. Second paragraph MUST be: "Also, here are some ${issueWord} I've identified on your hero section:"
-8. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
-9. NO signature - Gmail will add it automatically
-10. Tone: Direct, expert, helpful
-11. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
+3. First sentence MUST start with "Your homepage takes X seconds to load" (use exact load time from findings)
+4. First sentence MUST include conversion loss percentage (e.g., "that's likely costing you 30-35% of your conversions before visitors even see your offer")
+5. NO em dashes. Use commas instead.
+6. Second paragraph MUST be: "Also, your hero section has some ${issueWord} I've flagged below:"
+7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
+8. NO signature - Gmail will add it automatically
+9. Tone: Direct, expert, helpful
+10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
 
 SPACING RULES:
 - After "hero section:" → single newline → [IMAGE] (NO blank line between text and image)
@@ -119,7 +118,7 @@ SPACING RULES:
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi ${firstName},\\n\\nI ran a diagnostic on ${domain}. Your site takes X seconds to load, ${bounceImpact}.\\n\\nAlso, here are some ${issueWord} I've identified on your hero section:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi ${firstName},\\n\\nYour homepage takes X seconds to load, ${conversionLoss}.\\n\\nAlso, your hero section has some ${issueWord} I've flagged below:\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
 }`;
 }
 
