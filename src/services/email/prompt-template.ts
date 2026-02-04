@@ -112,6 +112,10 @@ RULES:
 10. Tone: Direct, expert, helpful
 11. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
 
+SPACING RULES:
+- After "hero section:" → single newline → [IMAGE] (NO blank line between text and image)
+- After [IMAGE] → blank line → CTA (one blank line after image)
+
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",

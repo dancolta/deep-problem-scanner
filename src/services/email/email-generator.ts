@@ -42,6 +42,10 @@ export class EmailGenerator {
     }
 
     let body = parsed.body.trim();
+
+    // Normalize spacing around [IMAGE]: no blank line before, one blank line after
+    body = this.normalizeImageSpacing(body);
+
     const wordCount = countWords(body);
     if (wordCount > opts.maxBodyWords) {
       body = truncateToWordLimit(body, opts.maxBodyWords);
@@ -88,6 +92,21 @@ export class EmailGenerator {
     }
   }
 
+  /**
+   * Normalize spacing around [IMAGE]:
+   * - Single newline before [IMAGE] (no blank line)
+   * - Double newline after [IMAGE] (one blank line)
+   */
+  private normalizeImageSpacing(body: string): string {
+    // Replace any whitespace before [IMAGE] with single newline
+    body = body.replace(/\n\s*\n\s*\[IMAGE\]/g, '\n[IMAGE]');
+    // Replace any whitespace after [IMAGE] with double newline (one blank line)
+    body = body.replace(/\[IMAGE\]\s*\n?/g, '[IMAGE]\n\n');
+    // Clean up any triple+ newlines that might result
+    body = body.replace(/\n{3,}/g, '\n\n');
+    return body.trim();
+  }
+
   private generateFallback(context: PromptContext): GeneratedEmail {
     const firstName = context.contactName.split(' ')[0];
     const subject = `${context.companyName}'s website speed`;
@@ -123,8 +142,7 @@ export class EmailGenerator {
 
 I ran a diagnostic on ${domain}. ${loadTimeText}
 
-See the ${issueWord} I've identified on your hero section
-
+Also, here are some ${issueWord} I've identified on your hero section:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.`;
