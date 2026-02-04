@@ -374,3 +374,15 @@
   margin-bottom: 16px;
   font-size: 0.85rem;
 }
+
+.sync-message {
+  padding: 10px 16px;
+  border-radius: 6px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+
+.sync-message.success {
+  background: #27ae6022;
+  color: #27ae60;
+}

@@ -16,12 +16,27 @@ const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
   label: `${i === 0 ? '12' : i > 12 ? i - 12 : i}:00 ${i < 12 ? 'AM' : 'PM'}`,
 }));
 
+/**
+ * Validates that a schedule row has the required data for email sending.
+ * A valid schedule row must have:
+ * - company_name: identifies the target company
+ * - contact_email: required recipient address
+ * - email_subject OR email_body: must have draft content to send
+ */
+function isValidScheduleRow(row: SheetRow): boolean {
+  const hasCompanyName = Boolean(row.company_name?.trim());
+  const hasContactEmail = Boolean(row.contact_email?.trim());
+  const hasEmailContent = Boolean(row.email_subject?.trim() || row.email_body?.trim());
+  return hasCompanyName && hasContactEmail && hasEmailContent;
+}
+
 export default function SchedulePage() {
   const [emails, setEmails] = useState<SheetRow[]>([]);
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerState>('idle');
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [syncing, setSyncing] = useState(false);
+  const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
   // Schedule config
   const todayStr = new Date().toISOString().split('T')[0];
@@ -65,7 +80,9 @@ export default function SchedulePage() {
         const spreadsheetId = match ? match[1] : s.googleSheetUrl;
         const sheetsResp = await window.electronAPI.invoke(IPC_CHANNELS.SHEETS_READ, spreadsheetId) as any;
         if (sheetsResp?.success && sheetsResp.rows) {
-          setEmails(sheetsResp.rows);
+          // Filter to only include valid rows with actual email data
+          const validRows = (sheetsResp.rows as SheetRow[]).filter(isValidScheduleRow);
+          setEmails(validRows);
         }
       }
     } catch {
@@ -303,13 +320,26 @@ export default function SchedulePage() {
           className="btn btn-refresh"
           onClick={async () => {
             setSyncing(true);
-            try { await loadFromSheet(); } finally { setSyncing(false); }
+            setSyncMessage(null);
+            try {
+              await loadFromSheet();
+              // After loadFromSheet completes, emails state will have the filtered rows
+              // We can't access the count directly, so show a generic message
+              setSyncMessage('Synced with sheet successfully.');
+              setTimeout(() => setSyncMessage(null), 3000);
+            } finally {
+              setSyncing(false);
+            }
           }}
           disabled={sheetLoading || syncing}
         >
           {syncing || sheetLoading ? 'Syncing...' : 'Sync with Sheet'}
         </button>
       </div>
+
+      {syncMessage && (
+        <div className="sync-message success">{syncMessage}</div>
+      )}
 
       {/* Stats */}
       <div className="schedule-stats">
