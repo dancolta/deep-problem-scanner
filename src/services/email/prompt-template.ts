@@ -14,7 +14,35 @@ export const BUZZWORD_BLACKLIST: Array<{ pattern: RegExp; replacement: string }>
   // { pattern: /\bleverage\b/gi, replacement: 'use' },
 ];
 
-export const DEFAULT_EMAIL_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
+/**
+ * CTA options for rotation - alternates between emails
+ */
+export const CTA_OPTIONS = [
+  "Want me to walk you through the rest of the findings? Takes 15 minutes.",
+  "Worth a 15-min call to see if the other issues are worth fixing?"
+];
+
+/**
+ * User-editable email template (simplified version for UI)
+ * This is what users see and can customize in the Setup page.
+ * The core prompt logic wraps this template with AI instructions.
+ */
+export const USER_EMAIL_TEMPLATE = `Subject: [3-7 words, reference their main problem]
+
+Hi {{firstName}},
+
+{{introHook}}
+
+[TRANSITION_SENTENCE]
+[IMAGE]
+
+{{cta}}`;
+
+/**
+ * Core AI prompt template - contains instructions for the AI.
+ * The {{emailPattern}} placeholder is replaced with the user's custom template.
+ */
+export const CORE_PROMPT_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
 
 RECIPIENT:
 - First name: {{firstName}}
@@ -31,16 +59,7 @@ SCAN FINDINGS:
 
 EMAIL PATTERN:
 
-Subject: [3-7 words, reference their main problem]
-
-Hi {{firstName}},
-
-[HOOK: {{introHook}}]
-
-[TRANSITION_SENTENCE]
-[IMAGE]
-
-Want me to walk you through the rest of the findings? Takes 15 minutes.
+{{emailPattern}}
 
 ---
 
@@ -53,7 +72,7 @@ Hi Sarah,
 [TRANSITION_SENTENCE]
 [IMAGE]
 
-Want me to walk you through the rest of the findings? Takes 15 minutes.
+{{cta}}
 
 ---
 
@@ -64,7 +83,7 @@ RULES:
 4. First sentence MUST include the impact statement if a metric is provided
 5. NO em dashes. Use commas instead.
 6. Second paragraph: Output exactly "[TRANSITION_SENTENCE]" - this is a placeholder that will be filled in later.
-7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
+7. CTA MUST be exactly: "{{cta}}"
 8. NO signature - Gmail will add it automatically
 9. Tone: Direct, expert, helpful
 10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
@@ -77,7 +96,7 @@ SPACING RULES:
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\n[Your intro sentence here]\\n\\n[TRANSITION_SENTENCE]\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi {{firstName}},\\n\\n[Your intro sentence here]\\n\\n[TRANSITION_SENTENCE]\\n[IMAGE]\\n\\n{{cta}}"
 }`;
 
 /**
@@ -90,19 +109,6 @@ const INDUSTRY_THRESHOLDS: Record<string, number> = {
   'SEO Score': 80,              // Below 80 = flag it
   'Best Practices Score': 80,   // Below 80 = flag it
 };
-
-/**
- * Get impact message based on PageSpeed metric and score
- */
-function getMetricImpact(metricName: string, score: number): string {
-  const impacts: Record<string, string> = {
-    'Performance Score': "that's likely costing you conversions before visitors even see your offer",
-    'Accessibility Score': "that's likely turning away visitors who can't easily use your site",
-    'SEO Score': "that's likely hurting your visibility in search results",
-    'Best Practices Score': "that could be affecting your site's security and user trust",
-  };
-  return impacts[metricName] || "that could be affecting your conversions";
-}
 
 /**
  * Get intro sentence for a PageSpeed metric
@@ -142,7 +148,8 @@ function findPoorestPoorMetric(diagnostics: DiagnosticResult[]): { name: string;
 export function buildEmailPrompt(
   context: PromptContext,
   options?: Partial<EmailGenerationOptions>,
-  customTemplate?: string
+  customTemplate?: string,
+  emailIndex: number = 0
 ): string {
   const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
   const firstName = context.contactName.split(' ')[0];
@@ -188,12 +195,11 @@ export function buildEmailPrompt(
   let secondParagraph: string;
 
   if (poorestMetric) {
-    // Use the genuinely poor PageSpeed metric
+    // Use the genuinely poor PageSpeed metric - let AI craft the impact statement
     const intro = getMetricIntro(poorestMetric.name, poorestMetric.score);
-    const impact = getMetricImpact(poorestMetric.name, poorestMetric.score);
-    introHook = `${intro}, ${impact}.`;
+    introHook = `${intro}, [add a brief, natural impact statement about how this affects their business].`;
     introMetric = `${poorestMetric.name}: ${poorestMetric.score}/100 (below industry threshold)`;
-    exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions before visitors even see your offer.`;
+    exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions.`;
     secondParagraph = `Also, your hero section has some ${issueWord} I've flagged below:`;
   } else {
     // All metrics are good - fallback (no hero mention in intro, save it for second paragraph)
@@ -203,8 +209,14 @@ export function buildEmailPrompt(
     secondParagraph = `Your hero section has some ${issueWord} I've flagged below:`;
   }
 
-  // Use custom template or default
-  const template = customTemplate || DEFAULT_EMAIL_TEMPLATE;
+  // Select CTA based on email index (rotates between options)
+  const cta = CTA_OPTIONS[emailIndex % CTA_OPTIONS.length];
+
+  // Use user's custom email pattern or default
+  const emailPattern = customTemplate || USER_EMAIL_TEMPLATE;
+
+  // Build final prompt: core AI instructions + user's email pattern
+  const template = CORE_PROMPT_TEMPLATE.replace(/\{\{emailPattern\}\}/g, emailPattern);
 
   // Interpolate placeholders (NOTE: secondParagraph is NOT interpolated here -
   // it's replaced AFTER AI generation to hide "hero" from the AI)
@@ -218,7 +230,8 @@ export function buildEmailPrompt(
     .replace(/\{\{issueCount\}\}/g, String(issueCount))
     .replace(/\{\{worstProblem\}\}/g, context.worstProblem)
     .replace(/\{\{diagnosticsSummary\}\}/g, context.diagnosticsSummary)
-    .replace(/\{\{issueWord\}\}/g, issueWord);
+    .replace(/\{\{issueWord\}\}/g, issueWord)
+    .replace(/\{\{cta\}\}/g, cta);
 }
 
 /**
@@ -246,11 +259,7 @@ export function getTransitionSentence(context: PromptContext): string {
     pageSpeedMetrics.includes(d.name) && d.score < 80
   );
 
-  if (hasPoorMetric) {
-    return `Also, your hero section has some ${issueWord} I've flagged below:`;
-  } else {
-    return `Your hero section has some ${issueWord} I've flagged below:`;
-  }
+  return `Also, your hero section has some ${issueWord} I've flagged below:`;
 }
 
 export function buildDiagnosticsSummary(diagnostics: DiagnosticResult[]): string {
