@@ -5,7 +5,7 @@ import type { SheetRow, AppSettings } from '../../shared/types';
 import './DraftsPage.css';
 
 type DraftStatus = 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
-type FilterTab = 'all' | 'draft' | 'approved' | 'rejected';
+type FilterTab = 'all' | 'draft';
 
 interface LocalDraft {
   id: number;
@@ -196,8 +196,6 @@ export default function DraftsPage() {
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'draft', label: 'Draft' },
-    { key: 'approved', label: 'Approved' },
-    { key: 'rejected', label: 'Rejected' },
   ];
 
   if (loading) {

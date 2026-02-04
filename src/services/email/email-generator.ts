@@ -15,10 +15,11 @@ export class EmailGenerator {
 
   async generateEmail(
     context: PromptContext,
-    options?: Partial<EmailGenerationOptions>
+    options?: Partial<EmailGenerationOptions>,
+    customTemplate?: string
   ): Promise<GeneratedEmail> {
     const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
-    const prompt = buildEmailPrompt(context, opts);
+    const prompt = buildEmailPrompt(context, opts, customTemplate);
 
     // Attempt 1: Call Gemini
     let parsed = await this.callAndParse(prompt);
@@ -158,13 +159,14 @@ Want me to walk you through the rest of the findings? Takes 15 minutes.`;
 
   async generateBatch(
     contexts: PromptContext[],
-    options?: Partial<EmailGenerationOptions>
+    options?: Partial<EmailGenerationOptions>,
+    customTemplate?: string
   ): Promise<GeneratedEmail[]> {
     const results: GeneratedEmail[] = [];
 
     for (let i = 0; i < contexts.length; i++) {
       try {
-        const email = await this.generateEmail(contexts[i], options);
+        const email = await this.generateEmail(contexts[i], options, customTemplate);
         results.push(email);
         console.log(`[EmailGenerator] Generated ${i + 1}/${contexts.length}: ${email.subject}`);
       } catch (error) {

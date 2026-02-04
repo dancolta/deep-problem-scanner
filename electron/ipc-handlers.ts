@@ -429,7 +429,18 @@ export function registerAllHandlers(): void {
               annotationLabels: annotationLabels,
             });
 
-            const email = await emailGen.generateEmail(promptContext);
+            // Load custom template from settings if available
+            let customTemplate: string | undefined;
+            try {
+              const templateSettingsPath = path.join(app.getPath('userData'), 'settings.json');
+              const templateSettingsContent = await fs.readFile(templateSettingsPath, 'utf-8');
+              const templateSettings = JSON.parse(templateSettingsContent);
+              customTemplate = templateSettings.customEmailTemplate;
+            } catch {
+              // No custom template, use default
+            }
+
+            const email = await emailGen.generateEmail(promptContext, undefined, customTemplate);
             console.timeEnd(`[IPC] email-${i}`);
 
             // 6. Build sheet row

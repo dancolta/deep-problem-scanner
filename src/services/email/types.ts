@@ -23,6 +23,7 @@ export interface EmailGenerationOptions {
   maxSubjectChars: number;
   tone: 'professional' | 'casual' | 'friendly';
   includeScreenshotMention: boolean;
+  customTemplate?: string;
 }
 
 export const DEFAULT_EMAIL_OPTIONS: EmailGenerationOptions = {

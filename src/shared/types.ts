@@ -64,6 +64,7 @@ export interface AppSettings {
   sendIntervalMinutes: number;
   timezone: string;
   geminiApiKey?: string;
+  customEmailTemplate?: string;
   scheduleStartHour: number;
   scheduleEndHour: number;
   emailsPerHour: number;
