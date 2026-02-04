@@ -1,6 +1,17 @@
 // Scan-related types (renderer-safe versions - no Buffer)
 export type ScanStatus = 'SUCCESS' | 'FAILED' | 'BLOCKED' | 'TIMEOUT';
 
+export type ScanPhase =
+  | 'initializing'
+  | 'opening_page'
+  | 'ai_analysis'
+  | 'capturing_screenshot'
+  | 'drawing_annotations'
+  | 'uploading_drive'
+  | 'generating_email'
+  | 'creating_draft'
+  | 'completed';
+
 export interface DiagnosticResult {
   name: string;
   status: 'pass' | 'warning' | 'fail';
@@ -33,6 +44,18 @@ export interface ScanProgress {
   failed: number;
   currentUrl: string;
   results: ScanResult[];
+  currentPhase?: ScanPhase;
+  phaseDescription?: string;
+  currentLeadIndex?: number;
+}
+
+export interface ScanCompletionSummary {
+  totalProcessed: number;
+  successCount: number;
+  failedCount: number;
+  skippedCount: number;
+  totalElapsedMs: number;
+  completedAt: string;
 }
 
 export interface AppSettings {

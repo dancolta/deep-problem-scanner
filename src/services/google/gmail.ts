@@ -4,9 +4,58 @@ import { EmailDraft } from '../../shared/types';
 
 export class GmailService {
   private gmail: gmail_v1.Gmail;
+  private cachedSignature: string | null = null;
 
   constructor(private authClient: OAuth2Client) {
     this.gmail = google.gmail({ version: 'v1', auth: authClient });
+  }
+
+  /**
+   * Fetch the user's Gmail signature from their primary send-as address
+   */
+  async getSignature(): Promise<string> {
+    if (this.cachedSignature !== null) {
+      console.log('[GmailService] Using cached signature, length:', this.cachedSignature.length);
+      return this.cachedSignature;
+    }
+
+    try {
+      console.log('[GmailService] Fetching signature from Gmail API...');
+      // Get the list of send-as addresses (includes signature)
+      const response = await this.gmail.users.settings.sendAs.list({
+        userId: 'me',
+      });
+
+      // Find the primary (default) send-as address
+      const sendAsAddresses = response.data.sendAs || [];
+      console.log('[GmailService] Found', sendAsAddresses.length, 'send-as addresses');
+      const primary = sendAsAddresses.find(addr => addr.isDefault) || sendAsAddresses[0];
+
+      if (primary?.signature) {
+        this.cachedSignature = primary.signature;
+        console.log('[GmailService] Fetched user signature, length:', primary.signature.length);
+        return primary.signature;
+      }
+
+      console.log('[GmailService] No signature found in primary send-as address');
+      this.cachedSignature = '';
+      return '';
+    } catch (error: unknown) {
+      const err = error as { code?: number; message?: string; status?: number };
+      const errorCode = err.code || err.status;
+
+      if (errorCode === 403) {
+        console.error('[GmailService] Permission denied fetching signature. The gmail.settings.basic scope may be missing. User should re-authenticate to grant access.');
+      } else if (errorCode === 401) {
+        console.error('[GmailService] Authentication expired fetching signature. User should re-authenticate.');
+      } else {
+        console.error('[GmailService] Failed to fetch signature:', err.message);
+      }
+
+      // Graceful fallback - don't break draft creation
+      this.cachedSignature = '';
+      return '';
+    }
   }
 
   async createDraft(draft: EmailDraft, emailBuffer?: Buffer): Promise<{ draftId: string; threadId: string }> {
@@ -21,6 +70,11 @@ export class GmailService {
     const mimeType = `image/${imageFormat}`;
     const filename = `screenshot.${imageFormat}`;
 
+    // Fetch user's Gmail signature
+    const signature = await this.getSignature();
+    console.log('[GmailService] Signature for draft:', signature ? `${signature.length} chars` : 'empty');
+    const signatureHtml = signature ? `<br><br><div class="gmail_signature">${signature}</div>` : '';
+
     // Build HTML body: replace [IMAGE] placeholder with inline image, wrap in HTML
     const bodyText = draft.body;
     const hasImagePlaceholder = bodyText.includes('[IMAGE]');
@@ -31,20 +85,20 @@ export class GmailService {
       const parts = bodyText.split('[IMAGE]');
       const beforeImage = parts[0].trim().split(/\n\n+/).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n');
       const afterImage = parts.slice(1).join('[IMAGE]').trim().split(/\n\n+/).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n');
-      htmlBody = `<html><body>${beforeImage}<br><p><img src="cid:screenshot" alt="Website Screenshot" style="max-width:100%; border-radius:8px; border:1px solid #e5e7eb;"></p><br>${afterImage}</body></html>`;
+      htmlBody = `<html><body>${beforeImage}<br><p><img src="cid:screenshot" alt="Website Screenshot" style="max-width:100%; border-radius:8px; border:1px solid #e5e7eb;"></p><br>${afterImage}${signatureHtml}</body></html>`;
     } else if (hasImagePlaceholder && draft.screenshotDriveUrl) {
       const parts = bodyText.split('[IMAGE]');
       const beforeImage = parts[0].trim().split(/\n\n+/).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n');
       const afterImage = parts.slice(1).join('[IMAGE]').trim().split(/\n\n+/).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n');
-      htmlBody = `<html><body>${beforeImage}<br><p><a href="${draft.screenshotDriveUrl}">View Screenshot</a></p><br>${afterImage}</body></html>`;
+      htmlBody = `<html><body>${beforeImage}<br><p><a href="${draft.screenshotDriveUrl}">View Screenshot</a></p><br>${afterImage}${signatureHtml}</body></html>`;
     } else {
       const paragraphs = bodyText.split(/\n\n+/).map((p) => `<p>${p.replace(/\n/g, '<br>')}</p>`).join('\n');
       if (imageBuffer) {
-        htmlBody = `<html><body>${paragraphs}<br><p><img src="cid:screenshot" alt="Website Screenshot" style="max-width:100%;"></p></body></html>`;
+        htmlBody = `<html><body>${paragraphs}<br><p><img src="cid:screenshot" alt="Website Screenshot" style="max-width:100%;"></p>${signatureHtml}</body></html>`;
       } else if (draft.screenshotDriveUrl) {
-        htmlBody = `<html><body>${paragraphs}<br><p><a href="${draft.screenshotDriveUrl}">View Screenshot</a></p></body></html>`;
+        htmlBody = `<html><body>${paragraphs}<br><p><a href="${draft.screenshotDriveUrl}">View Screenshot</a></p>${signatureHtml}</body></html>`;
       } else {
-        htmlBody = `<html><body>${paragraphs}</body></html>`;
+        htmlBody = `<html><body>${paragraphs}${signatureHtml}</body></html>`;
       }
     }
 

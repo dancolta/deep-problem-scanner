@@ -9,6 +9,19 @@ import { drawAnnotations } from '../src/services/annotation/drawing';
 import { compressImage, compressForEmail } from '../src/services/annotation/compression';
 import { AnnotationCoord } from '../src/services/annotation/types';
 import { VerifiedIssue } from '../src/services/scanner/playwright-scanner';
+import type { ScanPhase, ScanCompletionSummary } from '../src/shared/types';
+
+const PHASE_DESCRIPTIONS: Record<ScanPhase, string> = {
+  initializing: 'Initializing scan...',
+  opening_page: 'Opening webpage...',
+  ai_analysis: 'AI analyzing for conversion issues...',
+  capturing_screenshot: 'Capturing screenshot...',
+  drawing_annotations: 'Drawing issue annotations...',
+  uploading_drive: 'Uploading to Google Drive...',
+  generating_email: 'Generating personalized email...',
+  creating_draft: 'Creating Gmail draft...',
+  completed: 'Scan complete',
+};
 
 // Fallback selectors for common sections
 const SECTION_FALLBACKS: Record<string, string[]> = {
@@ -161,7 +174,7 @@ export function registerAllHandlers(): void {
     IPC_CHANNELS.SCAN_START,
     async (event, { leads, spreadsheetId }: { leads: any[]; spreadsheetId?: string }) => {
       try {
-        // Sync Gemini API key from settings.json → process.env
+        // Load settings for API key
         try {
           const settingsPath = path.join(app.getPath('userData'), 'settings.json');
           const settingsContent = await fs.readFile(settingsPath, 'utf-8');
@@ -184,17 +197,27 @@ export function registerAllHandlers(): void {
 
         const results: any[] = [];
         const window = BrowserWindow.fromWebContents(event.sender);
+        const scanStartTime = Date.now();
+
+        // Helper to send phase progress
+        const sendPhaseProgress = (phase: ScanPhase, leadIndex: number, currentUrl: string) => {
+          window?.webContents.send(IPC_CHANNELS.SCAN_PROGRESS, {
+            total: leads.length,
+            completed: results.filter((r: any) => r.scanStatus === 'SUCCESS').length,
+            failed: results.filter((r: any) => r.scanStatus === 'FAILED').length,
+            currentUrl,
+            currentPhase: phase,
+            phaseDescription: PHASE_DESCRIPTIONS[phase],
+            currentLeadIndex: leadIndex,
+            results: [], // Include empty results array so frontend updates
+          });
+        };
 
         for (let i = 0; i < leads.length; i++) {
           const lead = leads[i];
 
-          // Send progress
-          window?.webContents.send(IPC_CHANNELS.SCAN_PROGRESS, {
-            total: leads.length,
-            completed: i,
-            failed: results.filter((r: any) => r.scanStatus === 'FAILED').length,
-            currentUrl: lead.website_url,
-          });
+          // Send initial progress for this lead
+          sendPhaseProgress('opening_page', i, lead.website_url);
 
           try {
             // 1. Open page and get viewport screenshot
@@ -209,6 +232,7 @@ export function registerAllHandlers(): void {
             }
 
             // 2. GEMINI AI ANALYSIS - Analyze screenshot for conversion issues
+            sendPhaseProgress('ai_analysis', i, lead.website_url);
             console.time(`[IPC] gemini-${i}`);
             const geminiAnalysis = await analyzePageSections(
               session.viewportScreenshot,
@@ -314,6 +338,7 @@ export function registerAllHandlers(): void {
             console.log(`[IPC] Capturing at top of page (scroll: 0), ${selectedIssues.length} issues to annotate`);
 
             // 5. Capture screenshot at optimal position
+            sendPhaseProgress('capturing_screenshot', i, lead.website_url);
             const screenshotBuffer = await scanner.captureAtPosition(session.page, bestScrollY);
 
             // 6. Build annotations - cards are placed on right side, so include ALL issues
@@ -362,6 +387,7 @@ export function registerAllHandlers(): void {
             }
 
             console.log(`[IPC] Drawing ${annotations.length} verified annotations`);
+            sendPhaseProgress('drawing_annotations', i, lead.website_url);
             const annotatedBuffer = await drawAnnotations(screenshotBuffer, annotations);
             const finalScreenshot = await compressForEmail(annotatedBuffer, 400, 1200);
 
@@ -377,6 +403,7 @@ export function registerAllHandlers(): void {
             await scanner.closePageSession(session);
 
             // 4. Upload screenshots to Drive
+            sendPhaseProgress('uploading_drive', i, lead.website_url);
             console.time(`[IPC] drive-${i}`);
             const slug = lead.company_name.toLowerCase().replace(/[^a-z0-9]/g, '-').substring(0, 50);
             const dateStr = new Date().toISOString().split('T')[0];
@@ -391,6 +418,7 @@ export function registerAllHandlers(): void {
             console.timeEnd(`[IPC] drive-${i}`);
 
             // 5. Generate email with issue details (using verified data)
+            sendPhaseProgress('generating_email', i, lead.website_url);
             console.time(`[IPC] email-${i}`);
             const promptContext = buildPromptContext({
               companyName: lead.company_name,
@@ -419,6 +447,7 @@ export function registerAllHandlers(): void {
             };
 
             // 7. Create Gmail draft with embedded images
+            sendPhaseProgress('creating_draft', i, lead.website_url);
             if (sectionScreenshots.length > 0) {
               const draftPayload = {
                 to: lead.contact_email,
@@ -465,8 +494,18 @@ export function registerAllHandlers(): void {
 
         await scanner.shutdown();
 
+        // Build completion summary
+        const completionSummary: ScanCompletionSummary = {
+          totalProcessed: leads.length,
+          successCount: results.filter((r: any) => r.scanStatus === 'SUCCESS').length,
+          failedCount: results.filter((r: any) => r.scanStatus === 'FAILED').length,
+          skippedCount: results.filter((r: any) => r.sheetRow?.email_status === 'skip').length,
+          totalElapsedMs: Date.now() - scanStartTime,
+          completedAt: new Date().toISOString(),
+        };
+
         // Final progress
-        window?.webContents.send(IPC_CHANNELS.SCAN_COMPLETE, { results });
+        window?.webContents.send(IPC_CHANNELS.SCAN_COMPLETE, { results, completionSummary });
 
         return { success: true, results };
       } catch (error) {

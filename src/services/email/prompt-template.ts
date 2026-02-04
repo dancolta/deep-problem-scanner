@@ -1,58 +1,124 @@
 import { DiagnosticResult } from '../scanner/types';
 import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
 
+/**
+ * Get bounce rate impact text based on load time in seconds
+ * Based on industry research on page load times and bounce rates
+ */
+function getBounceImpact(loadTimeSeconds: number): string {
+  if (loadTimeSeconds <= 3) {
+    return 'which keeps most visitors engaged';
+  } else if (loadTimeSeconds <= 5) {
+    return 'that typically bounces 20-25% of visitors before they see your offer';
+  } else if (loadTimeSeconds <= 8) {
+    return 'that typically bounces 30-35% of visitors before they see your offer';
+  } else if (loadTimeSeconds <= 12) {
+    return 'that typically bounces 40%+ of visitors before they see your offer';
+  } else {
+    return 'that typically bounces 50%+ of visitors before they see your offer';
+  }
+}
+
 export function buildEmailPrompt(
   context: PromptContext,
   options?: Partial<EmailGenerationOptions>
 ): string {
   const opts = { ...DEFAULT_EMAIL_OPTIONS, ...options };
+  const firstName = context.contactName.split(' ')[0];
+  const loadTime = context.loadTimeSeconds ? `${context.loadTimeSeconds} seconds` : null;
+  const bounceImpact = context.loadTimeSeconds ? getBounceImpact(context.loadTimeSeconds) : 'that may be costing you conversions';
 
-  return `Generate a cold outreach email. You MUST follow the EXACT template below — no deviations.
+  // Extract domain from URL (e.g., "talentflow.com" from "https://www.talentflow.com/page")
+  let domain = context.websiteUrl;
+  try {
+    const url = new URL(context.websiteUrl.startsWith('http') ? context.websiteUrl : `https://${context.websiteUrl}`);
+    domain = url.hostname.replace(/^www\./, '');
+  } catch {
+    // Keep original if URL parsing fails
+  }
+
+  // Singular/plural for issues
+  const issueCount = context.annotationLabels.length || context.problemCount || 1;
+  const issueWord = issueCount === 1 ? 'issue' : 'issues';
+
+  return `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
 
 RECIPIENT:
-- Name: ${context.contactName}
+- First name: ${firstName}
 - Company: ${context.companyName}
-- Website: ${context.websiteUrl}
+- Domain: ${domain}
 
 SCAN FINDINGS:
-- Problems found: ${context.problemCount}
-- Annotation labels: ${context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues'}
-- Most critical problem: ${context.worstProblem}
+- Page load time: ${loadTime || 'see diagnostics'}
+- Bounce impact: ${bounceImpact}
+- Number of issues found: ${issueCount}
+- Hero section issues: ${context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues'}
+- Most critical: ${context.worstProblem}
 - Full diagnostics: ${context.diagnosticsSummary}
 
-MANDATORY TEMPLATE (follow this EXACTLY):
+---
 
-Subject: [<8 words, reference their #1 problem specifically]
+EMAIL PATTERN:
 
-Hi {first_name},
+Subject: [3-7 words, reference their main problem]
 
-[First sentence: "I ran a diagnostic on {website}." followed by ONE specific finding with a NUMBER/METRIC from the diagnostics above — load time in seconds, score out of 100, number of broken links, etc. Make the metric feel alarming but factual.]
+Hi ${firstName},
 
-[Second sentence: "I also found two other issues" + brief phrase about impact relevant to their business/industry.]
+[HOOK: Start with "I ran a diagnostic on ${domain}." Then state load time + bounce impact. Example: "Your site takes 7.1 seconds to load, ${bounceImpact}."]
+
+See the ${issueWord} I've identified on your hero section
 
 [IMAGE]
 
-Want me to walk you through what I found? Takes 15 minutes.
+Want me to walk you through the rest of the findings? Takes 15 minutes.
 
-Dan
+---
 
-STRICT RULES:
-1. Total body MUST be under ${opts.maxBodyWords} words. Count carefully.
-2. Subject MUST be under 8 words and reference their specific #1 problem
-3. First line MUST include "I ran a diagnostic on {website}" and contain a specific number from the diagnostics (e.g., "7.1 seconds to load", "34/100 on Core Web Vitals", "3 broken links")
-4. Second line MUST start with "I also found two other issues"
-5. CTA MUST be exactly: "Want me to walk you through what I found? Takes 15 minutes."
-6. Sign off MUST be exactly: "Dan"
-7. Include "[IMAGE]" on its own line between the findings and the CTA — this is where the screenshot goes
-8. Tone: Direct, expert, concerned — NOT salesy
-9. NO ROI claims, NO pricing, NO buzzwords, NO "hope this finds you well"
-10. Use the recipient's first name only (extract from "${context.contactName}")
-11. Adapt the impact phrase in the second line to their likely industry based on their company name and website
+EXAMPLE (7+ seconds load time):
+
+Hi Sarah,
+
+I ran a diagnostic on talentflow.com. Your site takes 7.1 seconds to load, that typically bounces 40%+ of visitors before they see your offer.
+
+See the issue I've identified on your hero section
+
+[IMAGE]
+
+Want me to walk you through the rest of the findings? Takes 15 minutes.
+
+---
+
+EXAMPLE (12+ seconds load time):
+
+Hi Mike,
+
+I ran a diagnostic on shopbright.com. Your site takes 13.2 seconds to load, that typically bounces 50%+ of visitors before they see your offer.
+
+Also, see the issues I've identified on your hero section:
+
+[IMAGE]
+
+Want me to walk you through the rest of the findings? Takes 15 minutes.
+
+---
+
+RULES:
+1. Body: 75-100 words max (under 80 ideal). Be concise.
+2. Subject: 3-7 words, specific to their problem
+3. MUST use domain only (${domain}), NOT full URL
+4. MUST include "I ran a diagnostic on {domain}." in first sentence
+5. MUST include load time in seconds AND bounce impact (e.g., "takes X seconds to load, that typically bounces Y% of visitors before they see your offer")
+6. NO em dashes. Use commas instead.
+7. Second paragraph MUST be: "See the ${issueWord} I've identified on your hero section"
+8. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
+9. NO signature - Gmail will add it automatically
+10. Tone: Direct, expert, helpful
+11. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
 
 FORMAT: Respond ONLY with valid JSON:
 {
-  "subject": "your subject line here",
-  "body": "Hi Name,\\n\\nFirst paragraph here.\\n\\nI also found two other issues affecting your [context].\\n\\n[IMAGE]\\n\\nWant me to walk you through what I found? Takes 15 minutes.\\n\\nDan"
+  "subject": "your subject line",
+  "body": "Hi ${firstName},\\n\\nI ran a diagnostic on ${domain}. Your site takes X seconds to load, ${bounceImpact}.\\n\\nSee the ${issueWord} I've identified on your hero section\\n\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
 }`;
 }
 
@@ -80,6 +146,16 @@ export function buildPromptContext(params: {
     : warningDiagnostics.sort((a, b) => a.score - b.score)[0]
     || params.diagnostics[0];
 
+  // Extract load time from Page Speed diagnostic
+  const pageSpeedDiag = params.diagnostics.find(d => d.name === 'Page Speed');
+  let loadTimeSeconds: number | undefined;
+  if (pageSpeedDiag?.details) {
+    const match = pageSpeedDiag.details.match(/(\d+\.?\d*)\s*s/);
+    if (match) {
+      loadTimeSeconds = parseFloat(match[1]);
+    }
+  }
+
   return {
     companyName: params.companyName,
     contactName: params.contactName,
@@ -89,6 +165,7 @@ export function buildPromptContext(params: {
     annotationLabels: params.annotationLabels,
     problemCount: failedDiagnostics.length + warningDiagnostics.length,
     worstProblem: worstProblem ? `${worstProblem.name} (${worstProblem.details})` : 'general improvements needed',
+    loadTimeSeconds,
   };
 }
 

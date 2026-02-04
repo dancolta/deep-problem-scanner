@@ -6,7 +6,18 @@ import './ScanPage.css';
 
 export default function ScanPage() {
   const navigate = useNavigate();
-  const { progress, isScanning, elapsedTime, cancelScan } = useScan();
+  const {
+    progress,
+    isScanning,
+    elapsedTime,
+    isComplete,
+    finalElapsedTime,
+    completionSummary,
+    currentPhase,
+    phaseDescription,
+    cancelScan,
+    resetScan,
+  } = useScan();
   const feedRef = useRef<HTMLDivElement>(null);
 
   // Auto-scroll to latest result
@@ -18,8 +29,11 @@ export default function ScanPage() {
 
   const remaining = progress.total - progress.completed - progress.failed;
   const pct = progress.total > 0 ? Math.round(((progress.completed + progress.failed) / progress.total) * 100) : 0;
-  const minutes = String(Math.floor(elapsedTime / 60)).padStart(2, '0');
-  const seconds = String(elapsedTime % 60).padStart(2, '0');
+
+  // Use final elapsed time when complete, otherwise use live timer
+  const displayTime = isComplete && finalElapsedTime !== null ? finalElapsedTime : elapsedTime;
+  const minutes = String(Math.floor(displayTime / 60)).padStart(2, '0');
+  const seconds = String(displayTime % 60).padStart(2, '0');
 
   // Nothing has been started yet
   if (!isScanning && progress.total === 0) {
@@ -44,18 +58,31 @@ export default function ScanPage() {
     <div className="scan-page">
       {/* Progress Header */}
       <div className="scan-header">
-        <h2>{isScanning ? 'Scanning...' : 'Scan Complete'}</h2>
+        <h2>{isComplete ? 'Scan Complete' : isScanning ? 'Scanning...' : 'Scan Complete'}</h2>
         <div className="progress-bar-container">
-          <div className="progress-bar-fill" style={{ width: `${pct}%` }} />
+          <div
+            className={`progress-bar-fill${isComplete ? ' complete' : ''}`}
+            style={{ width: `${pct}%` }}
+          />
           <div className="progress-bar-label">
             {progress.completed + progress.failed} / {progress.total} ({pct}%)
           </div>
         </div>
-        {isScanning && progress.currentUrl && (
+
+        {/* Phase indicator */}
+        {isScanning && currentPhase && phaseDescription && (
+          <div className="phase-indicator">
+            <span className="phase-label">{currentPhase.replace(/_/g, ' ')}</span>
+            <span className="phase-description">{phaseDescription}</span>
+          </div>
+        )}
+
+        {isScanning && progress.currentUrl && !currentPhase && (
           <div className="current-url">
             Scanning: <span>{progress.currentUrl}</span>
           </div>
         )}
+
         <div className="stats-row">
           <div className="stat-item stat-completed">
             <strong>{progress.completed}</strong> Completed
@@ -71,6 +98,34 @@ export default function ScanPage() {
           </div>
         </div>
       </div>
+
+      {/* Completion Summary */}
+      {isComplete && completionSummary && (
+        <div className="completion-summary">
+          <h3>Scan Summary</h3>
+          <div className="summary-stats">
+            <div className="summary-stat success">
+              <span className="summary-value">{completionSummary.successCount}</span>
+              <span className="summary-label">Successful</span>
+            </div>
+            <div className="summary-stat failed">
+              <span className="summary-value">{completionSummary.failedCount}</span>
+              <span className="summary-label">Failed</span>
+            </div>
+            <div className="summary-stat skipped">
+              <span className="summary-value">{completionSummary.skippedCount}</span>
+              <span className="summary-label">Skipped</span>
+            </div>
+            <div className="summary-stat total">
+              <span className="summary-value">{completionSummary.totalProcessed}</span>
+              <span className="summary-label">Total</span>
+            </div>
+          </div>
+          <div className="summary-time">
+            Completed in {Math.floor(completionSummary.totalElapsedMs / 1000)}s
+          </div>
+        </div>
+      )}
 
       {/* Live Results Feed */}
       <div className="results-feed" ref={feedRef}>
@@ -98,9 +153,16 @@ export default function ScanPage() {
             Cancel Scan
           </button>
         ) : (
-          <button className="btn-drafts" onClick={() => navigate('/drafts')}>
-            View Drafts
-          </button>
+          <>
+            <button className="btn-drafts" onClick={() => navigate('/drafts')}>
+              View Drafts
+            </button>
+            {isComplete && (
+              <button className="btn-new-scan" onClick={() => { resetScan(); navigate('/upload'); }}>
+                New Scan
+              </button>
+            )}
+          </>
         )}
       </div>
     </div>

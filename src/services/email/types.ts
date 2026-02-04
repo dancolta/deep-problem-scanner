@@ -7,6 +7,7 @@ export interface PromptContext {
   annotationLabels: string[];
   problemCount: number;
   worstProblem: string;
+  loadTimeSeconds?: number; // Page load time for primary hook
 }
 
 export interface GeneratedEmail {

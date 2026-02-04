@@ -89,8 +89,45 @@ export class EmailGenerator {
   }
 
   private generateFallback(context: PromptContext): GeneratedEmail {
-    const subject = `Quick question about ${context.companyName}'s website`;
-    const body = `Hi ${context.contactName},\n\nI ran a quick scan of ${context.websiteUrl} and found ${context.problemCount} area${context.problemCount !== 1 ? 's' : ''} that could be improved — the most notable being ${context.worstProblem.toLowerCase()}. I've attached an annotated screenshot highlighting the specifics.\n\nWould you be open to a brief chat about addressing these?`;
+    const firstName = context.contactName.split(' ')[0];
+    const subject = `${context.companyName}'s website speed`;
+
+    // Extract domain from URL
+    let domain = context.websiteUrl;
+    try {
+      const url = new URL(context.websiteUrl.startsWith('http') ? context.websiteUrl : `https://${context.websiteUrl}`);
+      domain = url.hostname.replace(/^www\./, '');
+    } catch {
+      // Keep original if URL parsing fails
+    }
+
+    // Singular/plural for issues
+    const issueCount = context.annotationLabels.length || context.problemCount || 1;
+    const issueWord = issueCount === 1 ? 'issue' : 'issues';
+
+    // Get bounce impact based on load time
+    const getBounceImpact = (seconds: number): string => {
+      if (seconds <= 3) return 'which keeps most visitors engaged';
+      if (seconds <= 5) return 'that typically bounces 20-25% of visitors before they see your offer';
+      if (seconds <= 8) return 'that typically bounces 30-35% of visitors before they see your offer';
+      if (seconds <= 12) return 'that typically bounces 40%+ of visitors before they see your offer';
+      return 'that typically bounces 50%+ of visitors before they see your offer';
+    };
+
+    // Build body with load time and bounce impact
+    const loadTimeText = context.loadTimeSeconds
+      ? `Your site takes ${context.loadTimeSeconds} seconds to load, ${getBounceImpact(context.loadTimeSeconds)}.`
+      : `I found ${context.problemCount} area${context.problemCount !== 1 ? 's' : ''} that could be improved.`;
+
+    const body = `Hi ${firstName},
+
+I ran a diagnostic on ${domain}. ${loadTimeText}
+
+See the ${issueWord} I've identified on your hero section
+
+[IMAGE]
+
+Want me to walk you through the rest of the findings? Takes 15 minutes.`;
 
     return {
       subject,
