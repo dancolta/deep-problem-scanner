@@ -76,18 +76,42 @@ Hi Sarah,
 
 ---
 
-RULES:
+SUBJECT LINE FORMULAS (pick one based on available data):
+
+Formula 1 - Problem + Metric (when you have specific numbers):
+- "your site takes 4.3 seconds to load"
+- "homepage loads in 4.3 seconds"
+
+Formula 2 - Problem + Impact (emphasize business cost):
+- "your homepage might be losing conversions"
+- "hero section could be costing you leads"
+
+Formula 3 - Just the Metric (maximum curiosity):
+- "4.3 seconds"
+- "47 http requests"
+
+Formula 4 - Casual Observation (fallback when no metric):
+- "noticed a few issues on your site"
+- "quick thing about your homepage"
+
+SUBJECT LINE RULES:
+- ALL LOWERCASE (no caps except proper nouns)
+- NO PUNCTUATION (no periods, exclamation marks, question marks)
+- 3-7 words maximum
+- NO clickbait ("you won't believe", "shocking")
+- NO salesy words ("free", "opportunity", "limited time")
+
+BODY RULES:
 1. Body: 75-100 words max (under 80 ideal). Be concise.
-2. Subject: 3-7 words, reference their main problem
-3. First sentence MUST follow the intro hook pattern provided
-4. First sentence MUST include the impact statement if a metric is provided
-5. NO em dashes. Use commas instead.
-6. Second paragraph: Output exactly "[TRANSITION_SENTENCE]" - this is a placeholder that will be filled in later.
-7. CTA MUST be exactly: "{{cta}}"
-8. NO signature - Gmail will add it automatically
-9. Tone: Direct, expert, helpful
-10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
-11. NEVER use "hero" or "hero section" in the OPENING sentence. The transition sentence will mention "hero section" separately, so avoid it in your intro to prevent repetition.
+2. First sentence MUST follow the intro hook pattern provided
+3. First sentence MUST include the impact statement if a metric is provided
+4. NO em dashes. Use commas instead.
+5. Second paragraph: Output exactly "[TRANSITION_SENTENCE]" - this is a placeholder that will be filled in later.
+6. CTA MUST be exactly: "{{cta}}"
+7. NO signature - Gmail will add it automatically
+8. Tone: Direct, expert, helpful
+9. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
+10. NEVER use "hero" or "hero section" in the OPENING sentence. The transition sentence will mention "hero section" separately, so avoid it in your intro to prevent repetition.
 
 SPACING RULES:
 - After [TRANSITION_SENTENCE] → single newline → [IMAGE] (NO blank line between text and image)

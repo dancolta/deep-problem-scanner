@@ -161,21 +161,60 @@ Hi {{firstName}},
 {{cta}}
 ```
 
-### Email Rules
+### Subject Line Formulas
+
+Pick one based on available data:
+
+**Formula 1: Problem + Metric** (when you have specific numbers)
+```
+your site takes 4.3 seconds to load
+homepage loads in 4.3 seconds
+homepage is 4.3 seconds slow
+```
+
+**Formula 2: Problem + Impact** (emphasize business cost)
+```
+your homepage might be losing conversions
+losing 25% of visitors before they convert
+hero section could be costing you leads
+```
+
+**Formula 3: Just the Metric** (maximum curiosity)
+```
+4.3 seconds
+25% visitor drop
+47 http requests
+```
+
+**Formula 4: Casual Observation** (fallback when no metric)
+```
+noticed a few issues on your site
+quick thing about your homepage
+saw something on your site
+```
+
+### Subject Line Rules
+
+- ALL LOWERCASE (no caps except proper nouns)
+- NO PUNCTUATION (no periods, exclamation marks, question marks)
+- 3-7 words maximum
+- NO clickbait ("you won't believe", "shocking")
+- NO salesy words ("free", "opportunity", "limited time")
+
+### Body Rules
 
 | # | Rule |
 |---|------|
 | 1 | Body: 75-100 words max (under 80 ideal). Be concise. |
-| 2 | Subject: 3-7 words, reference their main problem |
-| 3 | First sentence MUST follow the intro hook pattern provided |
-| 4 | First sentence MUST include the impact statement if a metric is provided |
-| 5 | NO em dashes. Use commas instead. |
-| 6 | Second paragraph: Output exactly "[TRANSITION_SENTENCE]" placeholder |
-| 7 | CTA MUST match the provided CTA exactly |
-| 8 | NO signature - Gmail will add it automatically |
-| 9 | Tone: Direct, expert, helpful |
-| 10 | NO: ROI claims, pricing, buzzwords, "hope this finds you well" |
-| 11 | NEVER use "hero" or "hero section" in the OPENING sentence |
+| 2 | First sentence MUST follow the intro hook pattern provided |
+| 3 | First sentence MUST include the impact statement if a metric is provided |
+| 4 | NO em dashes. Use commas instead. |
+| 5 | Second paragraph: Output exactly "[TRANSITION_SENTENCE]" placeholder |
+| 6 | CTA MUST match the provided CTA exactly |
+| 7 | NO signature - Gmail will add it automatically |
+| 8 | Tone: Direct, expert, helpful |
+| 9 | NO: ROI claims, pricing, buzzwords, "hope this finds you well" |
+| 10 | NEVER use "hero" or "hero section" in the OPENING sentence |
 
 ### Spacing Rules
 
