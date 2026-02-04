@@ -11,24 +11,26 @@ function scoreToStatus(score: number): 'pass' | 'warning' | 'fail' {
   return 'fail';
 }
 
-// ---------- 1. Page Speed ----------
+// ---------- 1. LCP (Largest Contentful Paint) ----------
+// Based on Google Core Web Vitals recommendations:
+// Good: < 2.5s | Needs Improvement: 2.5-4s | Poor: > 4s
 
 export async function checkPageSpeed(
   _page: Page,
   loadTimeMs: number
 ): Promise<DiagnosticResult> {
   let score: number;
-  if (loadTimeMs < 2000) score = 100;
-  else if (loadTimeMs < 4000) score = 75;
-  else if (loadTimeMs < 6000) score = 50;
-  else if (loadTimeMs < 10000) score = 25;
-  else score = 0;
+  // Aligned with Google Core Web Vitals LCP thresholds
+  if (loadTimeMs < 2500) score = 100;      // Good
+  else if (loadTimeMs < 4000) score = 75;  // Needs Improvement
+  else if (loadTimeMs < 6000) score = 50;  // Poor
+  else score = 25;                          // Very Poor
 
   const seconds = (loadTimeMs / 1000).toFixed(1);
   return {
-    name: 'Page Speed',
+    name: 'LCP (Visual Load Time)',
     status: scoreToStatus(score),
-    details: `Page loaded in ${seconds}s`,
+    details: `Main content visible in ${seconds}s (LCP)`,
     score,
   };
 }
@@ -401,7 +403,7 @@ export async function runDiagnostics(
       return result.value;
     }
     const names = [
-      'Page Speed',
+      'LCP (Visual Load Time)',
       'Mobile Friendliness',
       'CTA Analysis',
       'SEO Basics',

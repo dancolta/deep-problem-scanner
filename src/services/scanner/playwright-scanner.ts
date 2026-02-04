@@ -6,12 +6,21 @@ import { createLogger } from '../../utils/logger';
 
 const log = createLogger('PlaywrightScanner');
 
+/**
+ * Represents an open page session for analysis.
+ */
 export interface PageSession {
   page: Page;
   context: BrowserContext;
   url: string;
   viewportScreenshot: Buffer;
   diagnostics: DiagnosticResult[];
+  /**
+   * Load time in milliseconds - represents LCP (Largest Contentful Paint).
+   * LCP measures when the largest visible content element renders,
+   * which closely matches user perception of "page loaded".
+   * Falls back to navigation time if LCP is not available.
+   */
   loadTimeMs: number;
 }
 
@@ -81,6 +90,11 @@ export class PlaywrightScanner {
   /**
    * Open a page and capture viewport screenshot for analysis.
    * Returns the page session so sections can be captured afterwards.
+   *
+   * Measures load time using LCP (Largest Contentful Paint) from the Performance API.
+   * LCP represents when the main content becomes visible to the user, which more
+   * accurately reflects perceived load time compared to waiting for all network
+   * activity to complete. Falls back to navigation time if LCP is unavailable.
    */
   async openPageForAnalysis(url: string): Promise<PageSession | null> {
     if (!this.browser) {
@@ -109,8 +123,11 @@ export class PlaywrightScanner {
       const startTime = Date.now();
 
       try {
+        // Use 'load' instead of 'networkidle' for faster navigation
+        // 'load' waits for initial resources; 'networkidle' waits for ALL network activity
+        // This avoids inflated times from background analytics/tracking scripts
         await withTimeout(
-          page.goto(url, { waitUntil: 'networkidle', timeout: this.options.timeoutMs }),
+          page.goto(url, { waitUntil: 'load', timeout: this.options.timeoutMs }),
           this.options.timeoutMs,
           `Navigation to ${url} timed out`
         );
@@ -123,7 +140,42 @@ export class PlaywrightScanner {
         throw err;
       }
 
-      const loadTimeMs = Date.now() - startTime;
+      const navigationTimeMs = Date.now() - startTime;
+      log.info(`Navigation completed in ${navigationTimeMs}ms, measuring LCP...`);
+
+      // Measure LCP (Largest Contentful Paint) using Performance API
+      // This gives us a more accurate "perceived load time" than network activity
+      const lcpEntry = await page.evaluate(() => {
+        return new Promise<number | null>((resolve) => {
+          // Check if LCP is already available in the buffer
+          const entries = performance.getEntriesByType('largest-contentful-paint');
+          if (entries.length > 0) {
+            const lastEntry = entries[entries.length - 1] as PerformanceEntry & { startTime: number };
+            resolve(lastEntry.startTime);
+            return;
+          }
+          // Otherwise observe for new LCP entries
+          new PerformanceObserver((list) => {
+            const observedEntries = list.getEntries();
+            if (observedEntries.length > 0) {
+              const lastEntry = observedEntries[observedEntries.length - 1] as PerformanceEntry & { startTime: number };
+              resolve(lastEntry.startTime);
+            }
+          }).observe({ type: 'largest-contentful-paint', buffered: true });
+          // Timeout fallback after 5 seconds if no LCP is triggered
+          setTimeout(() => resolve(null), 5000);
+        });
+      });
+
+      // Use LCP if available, otherwise fall back to navigation time
+      let loadTimeMs: number;
+      if (lcpEntry !== null && lcpEntry > 0) {
+        loadTimeMs = Math.round(lcpEntry);
+        log.info(`LCP measured: ${loadTimeMs}ms (navigation was ${navigationTimeMs}ms)`);
+      } else {
+        loadTimeMs = navigationTimeMs;
+        log.info(`LCP not available, using navigation time: ${loadTimeMs}ms`);
+      }
 
       // Wait for page to fully render
       await page.waitForTimeout(500);
@@ -812,12 +864,30 @@ export class PlaywrightScanner {
   private async runPlaywrightDiagnostics(page: Page, url: string, loadTimeMs: number): Promise<DiagnosticResult[]> {
     const diagnostics: DiagnosticResult[] = [];
 
-    // Load time diagnostic
+    // LCP diagnostic - aligned with Google Core Web Vitals
+    // Good: < 2.5s | Needs Improvement: 2.5-4s | Poor: > 4s
+    let lcpScore: number;
+    let lcpStatus: 'pass' | 'warning' | 'fail';
+    if (loadTimeMs < 2500) {
+      lcpScore = 100;
+      lcpStatus = 'pass';
+    } else if (loadTimeMs < 4000) {
+      lcpScore = 75;
+      lcpStatus = 'warning';
+    } else if (loadTimeMs < 6000) {
+      lcpScore = 50;
+      lcpStatus = 'warning';
+    } else {
+      lcpScore = 25;
+      lcpStatus = 'fail';
+    }
+
+    const seconds = (loadTimeMs / 1000).toFixed(1);
     diagnostics.push({
-      name: 'Page Load Time',
-      status: loadTimeMs < 3000 ? 'pass' : loadTimeMs < 5000 ? 'warning' : 'fail',
-      details: `${loadTimeMs}ms`,
-      score: Math.max(0, 100 - Math.floor(loadTimeMs / 100)),
+      name: 'LCP (Visual Load Time)',
+      status: lcpStatus,
+      details: `Main content visible in ${seconds}s (LCP)`,
+      score: lcpScore,
     });
 
     // Check for h1

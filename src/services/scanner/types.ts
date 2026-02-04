@@ -14,6 +14,11 @@ export interface ScanResult {
   status: ScanStatus;
   error?: string;
   timestamp: Date;
+  /**
+   * Load time in milliseconds - represents LCP (Largest Contentful Paint).
+   * LCP measures when the main content becomes visible to the user.
+   * Falls back to navigation time if LCP is not available.
+   */
   loadTimeMs?: number;
   blockedBy?: string; // 'cloudflare' | 'captcha' | 'access-denied'
 }
