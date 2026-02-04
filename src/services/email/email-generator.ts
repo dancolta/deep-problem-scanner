@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { PromptContext, GeneratedEmail, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
-import { buildEmailPrompt, countWords, truncateToWordLimit } from './prompt-template';
+import { buildEmailPrompt, countWords, truncateToWordLimit, getTransitionSentence, BUZZWORD_BLACKLIST } from './prompt-template';
 
 export class EmailGenerator {
   private genAI: GoogleGenerativeAI;
@@ -44,11 +44,16 @@ export class EmailGenerator {
 
     let body = parsed.body.trim();
 
+    // Replace [TRANSITION_SENTENCE] with the actual second paragraph
+    // This is done AFTER AI generation to hide "hero" from the AI
+    const transitionSentence = getTransitionSentence(context);
+    body = body.replace(/\[TRANSITION_SENTENCE\]/g, transitionSentence);
+
     // Normalize spacing around [IMAGE]: no blank line before, one blank line after
     body = this.normalizeImageSpacing(body);
 
-    // Fix: Remove "hero" from first paragraph (post-processing enforcement)
-    body = this.removeHeroFromFirstParagraph(body);
+    // Apply buzzword blacklist to filter forbidden words/phrases
+    body = this.applyBuzzwordBlacklist(body);
 
     const wordCount = countWords(body);
     if (wordCount > opts.maxBodyWords) {
@@ -97,40 +102,26 @@ export class EmailGenerator {
   }
 
   /**
-   * Remove any mention of "hero" from the first paragraph.
-   * This is a post-processing enforcement since the AI sometimes ignores the rule.
+   * Apply buzzword blacklist to filter forbidden words/phrases from the email body.
+   * Uses the centralized BUZZWORD_BLACKLIST for consistent filtering.
    */
-  private removeHeroFromFirstParagraph(body: string): string {
-    // Split into paragraphs
-    const paragraphs = body.split(/\n\n+/);
+  private applyBuzzwordBlacklist(body: string): string {
+    let result = body;
 
-    if (paragraphs.length < 2) return body;
-
-    // First paragraph is "Hi Name," - second is the intro we need to fix
-    let introParagraph = paragraphs[1];
-
-    // Check if "hero" appears in the intro paragraph
-    if (introParagraph.toLowerCase().includes('hero')) {
-      // Replace common patterns that mention hero
-      introParagraph = introParagraph
-        .replace(/\s*in your hero section/gi, '')
-        .replace(/\s*on your hero section/gi, '')
-        .replace(/\s*with your hero section/gi, '')
-        .replace(/\s*,?\s*including your hero section/gi, '')
-        .replace(/\s*,?\s*especially in your hero section/gi, '')
-        .replace(/\s*,?\s*particularly in your hero section/gi, '')
-        .replace(/\s*hero section\s*/gi, ' ')
-        .replace(/\s*hero\s*/gi, ' ')
-        .replace(/\s{2,}/g, ' ')  // Clean up double spaces
-        .replace(/\s+\./g, '.')   // Clean up space before period
-        .replace(/\s+,/g, ',')    // Clean up space before comma
-        .trim();
-
-      paragraphs[1] = introParagraph;
-      return paragraphs.join('\n\n');
+    // Apply each blacklist pattern in order (more specific patterns first)
+    for (const { pattern, replacement } of BUZZWORD_BLACKLIST) {
+      result = result.replace(pattern, replacement);
     }
 
-    return body;
+    // Clean up any artifacts from replacements
+    result = result
+      .replace(/\s{2,}/g, ' ')      // multiple spaces → single space
+      .replace(/\s+\./g, '.')        // space before period
+      .replace(/\s+,/g, ',')         // space before comma
+      .replace(/,\s*,/g, ',')        // double commas
+      .replace(/\.\s*\./g, '.');     // double periods
+
+    return result;
   }
 
   /**
@@ -207,7 +198,7 @@ export class EmailGenerator {
 
 ${introText}
 
-Also, your hero section has some ${issueWord} I've flagged below:
+Also, your above-the-fold area has some ${issueWord} I've flagged below:
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.`;

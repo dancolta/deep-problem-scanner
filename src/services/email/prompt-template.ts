@@ -1,14 +1,20 @@
 import { DiagnosticResult } from '../scanner/types';
 import { PromptContext, EmailGenerationOptions, DEFAULT_EMAIL_OPTIONS } from './types';
 
+/**
+ * Buzzword blacklist - words/phrases that should never appear in generated emails.
+ * Each entry has a regex pattern and its replacement.
+ * Order matters: more specific patterns (e.g., "hero section") should come before general ones (e.g., "hero").
+ */
+export const BUZZWORD_BLACKLIST: Array<{ pattern: RegExp; replacement: string }> = [
+  { pattern: /\bhero\s+section\b/gi, replacement: 'above-the-fold area' },
+  { pattern: /\bhero\b/gi, replacement: 'header' },
+  // Add more blacklisted buzzwords here as needed:
+  // { pattern: /\bsynergy\b/gi, replacement: '' },
+  // { pattern: /\bleverage\b/gi, replacement: 'use' },
+];
+
 export const DEFAULT_EMAIL_TEMPLATE = `Generate a cold outreach email following this pattern. Adapt naturally based on the findings.
-
-⚠️ STRICT CONSTRAINT - WILL BE VALIDATED:
-The word "hero" is FORBIDDEN in the first paragraph. If your first paragraph contains "hero", the email will be rejected.
-The word "hero" may ONLY appear in the second paragraph (the {{secondParagraph}} line).
-
-❌ WRONG: "I analyzed your site and spotted conversion gaps in your hero section..."
-✅ CORRECT: "I analyzed your site and spotted some conversion gaps that could be impacting your results..."
 
 RECIPIENT:
 - First name: {{firstName}}
@@ -18,7 +24,6 @@ RECIPIENT:
 SCAN FINDINGS:
 - Intro metric: {{introMetric}}
 - Number of issues found: {{issueCount}}
-- Hero section issues: {{heroIssues}}
 - Most critical: {{worstProblem}}
 - Full diagnostics: {{diagnosticsSummary}}
 
@@ -32,7 +37,7 @@ Hi {{firstName}},
 
 [HOOK: {{introHook}}]
 
-{{secondParagraph}}
+[TRANSITION_SENTENCE]
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -45,7 +50,7 @@ Hi Sarah,
 
 {{exampleIntro}}
 
-{{secondParagraph}}
+[TRANSITION_SENTENCE]
 [IMAGE]
 
 Want me to walk you through the rest of the findings? Takes 15 minutes.
@@ -58,21 +63,21 @@ RULES:
 3. First sentence MUST follow the intro hook pattern provided
 4. First sentence MUST include the impact statement if a metric is provided
 5. NO em dashes. Use commas instead.
-6. Second paragraph MUST be exactly: "{{secondParagraph}}"
+6. Second paragraph: Output exactly "[TRANSITION_SENTENCE]" - this is a placeholder that will be filled in later.
 7. CTA MUST be: "Want me to walk you through the rest of the findings? Takes 15 minutes."
 8. NO signature - Gmail will add it automatically
 9. Tone: Direct, expert, helpful
 10. NO: ROI claims, pricing, buzzwords, "hope this finds you well"
-11. CRITICAL: The first paragraph must NEVER contain the word "hero". The word "hero" can ONLY appear in the second paragraph.
+11. NEVER use "hero" or "hero section" in the email. Use alternatives like "header", "above-the-fold area", or "main section" instead.
 
 SPACING RULES:
-- After second paragraph → single newline → [IMAGE] (NO blank line between text and image)
+- After [TRANSITION_SENTENCE] → single newline → [IMAGE] (NO blank line between text and image)
 - After [IMAGE] → blank line → CTA (one blank line after image)
 
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\n{{introHook}}\\n\\n{{secondParagraph}}\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
+  "body": "Hi {{firstName}},\\n\\n[Your intro sentence here]\\n\\n[TRANSITION_SENTENCE]\\n[IMAGE]\\n\\nWant me to walk you through the rest of the findings? Takes 15 minutes."
 }`;
 
 /**
@@ -189,19 +194,20 @@ export function buildEmailPrompt(
     introHook = `${intro}, ${impact}.`;
     introMetric = `${poorestMetric.name}: ${poorestMetric.score}/100 (below industry threshold)`;
     exampleIntro = `Your website scores 35/100 on performance, that's likely costing you conversions before visitors even see your offer.`;
-    secondParagraph = `Also, your hero section has some ${issueWord} I've flagged below:`;
+    secondParagraph = `Also, your above-the-fold area has some ${issueWord} I've flagged below:`;
   } else {
     // All metrics are good - fallback (no hero mention in intro, save it for second paragraph)
     introHook = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
-    introMetric = `All PageSpeed metrics meet industry standards - focusing on hero section issues`;
+    introMetric = `All PageSpeed metrics meet industry standards - focusing on visual design issues`;
     exampleIntro = `I analyzed your site and spotted some conversion gaps that could be impacting your results.`;
-    secondParagraph = `Your hero section has some ${issueWord} I've flagged below:`;
+    secondParagraph = `Your above-the-fold area has some ${issueWord} I've flagged below:`;
   }
 
   // Use custom template or default
   const template = customTemplate || DEFAULT_EMAIL_TEMPLATE;
 
-  // Interpolate placeholders
+  // Interpolate placeholders (NOTE: secondParagraph is NOT interpolated here -
+  // it's replaced AFTER AI generation to hide "hero" from the AI)
   return template
     .replace(/\{\{firstName\}\}/g, firstName)
     .replace(/\{\{companyName\}\}/g, context.companyName)
@@ -209,12 +215,42 @@ export function buildEmailPrompt(
     .replace(/\{\{introHook\}\}/g, introHook)
     .replace(/\{\{introMetric\}\}/g, introMetric)
     .replace(/\{\{exampleIntro\}\}/g, exampleIntro)
-    .replace(/\{\{secondParagraph\}\}/g, secondParagraph)
     .replace(/\{\{issueCount\}\}/g, String(issueCount))
-    .replace(/\{\{heroIssues\}\}/g, context.annotationLabels.length > 0 ? context.annotationLabels.join(', ') : 'general issues')
     .replace(/\{\{worstProblem\}\}/g, context.worstProblem)
     .replace(/\{\{diagnosticsSummary\}\}/g, context.diagnosticsSummary)
     .replace(/\{\{issueWord\}\}/g, issueWord);
+}
+
+/**
+ * Get the transition sentence (second paragraph) for an email.
+ * This is kept separate from buildEmailPrompt to hide "hero" from the AI.
+ */
+export function getTransitionSentence(context: PromptContext): string {
+  const issueCount = context.annotationLabels.length || context.problemCount || 1;
+  const issueWord = issueCount === 1 ? 'issue' : 'issues';
+
+  // Check if we have a poor metric (determines "Also," prefix)
+  const parsedDiagnostics = context.diagnosticsSummary
+    .split(' | ')
+    .map(d => {
+      const match = d.match(/^(.+?):\s*\w+\s*\((\d+)\/100\)/);
+      if (match) {
+        return { name: match[1], score: parseInt(match[2], 10) };
+      }
+      return null;
+    })
+    .filter((d): d is { name: string; score: number } => d !== null);
+
+  const pageSpeedMetrics = ['Performance Score', 'Accessibility Score', 'SEO Score', 'Best Practices Score'];
+  const hasPoorMetric = parsedDiagnostics.some(d =>
+    pageSpeedMetrics.includes(d.name) && d.score < 80
+  );
+
+  if (hasPoorMetric) {
+    return `Also, your above-the-fold area has some ${issueWord} I've flagged below:`;
+  } else {
+    return `Your above-the-fold area has some ${issueWord} I've flagged below:`;
+  }
 }
 
 export function buildDiagnosticsSummary(diagnostics: DiagnosticResult[]): string {
