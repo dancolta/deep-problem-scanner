@@ -47,6 +47,9 @@ export class EmailGenerator {
     // Normalize spacing around [IMAGE]: no blank line before, one blank line after
     body = this.normalizeImageSpacing(body);
 
+    // Fix: Remove "hero" from first paragraph (post-processing enforcement)
+    body = this.removeHeroFromFirstParagraph(body);
+
     const wordCount = countWords(body);
     if (wordCount > opts.maxBodyWords) {
       body = truncateToWordLimit(body, opts.maxBodyWords);
@@ -94,6 +97,43 @@ export class EmailGenerator {
   }
 
   /**
+   * Remove any mention of "hero" from the first paragraph.
+   * This is a post-processing enforcement since the AI sometimes ignores the rule.
+   */
+  private removeHeroFromFirstParagraph(body: string): string {
+    // Split into paragraphs
+    const paragraphs = body.split(/\n\n+/);
+
+    if (paragraphs.length < 2) return body;
+
+    // First paragraph is "Hi Name," - second is the intro we need to fix
+    let introParagraph = paragraphs[1];
+
+    // Check if "hero" appears in the intro paragraph
+    if (introParagraph.toLowerCase().includes('hero')) {
+      // Replace common patterns that mention hero
+      introParagraph = introParagraph
+        .replace(/\s*in your hero section/gi, '')
+        .replace(/\s*on your hero section/gi, '')
+        .replace(/\s*with your hero section/gi, '')
+        .replace(/\s*,?\s*including your hero section/gi, '')
+        .replace(/\s*,?\s*especially in your hero section/gi, '')
+        .replace(/\s*,?\s*particularly in your hero section/gi, '')
+        .replace(/\s*hero section\s*/gi, ' ')
+        .replace(/\s*hero\s*/gi, ' ')
+        .replace(/\s{2,}/g, ' ')  // Clean up double spaces
+        .replace(/\s+\./g, '.')   // Clean up space before period
+        .replace(/\s+,/g, ',')    // Clean up space before comma
+        .trim();
+
+      paragraphs[1] = introParagraph;
+      return paragraphs.join('\n\n');
+    }
+
+    return body;
+  }
+
+  /**
    * Normalize spacing around [IMAGE]:
    * - Single newline before [IMAGE] (no blank line)
    * - Double newline after [IMAGE] (one blank line)
@@ -110,38 +150,62 @@ export class EmailGenerator {
 
   private generateFallback(context: PromptContext): GeneratedEmail {
     const firstName = context.contactName.split(' ')[0];
-    const subject = `${context.companyName}'s website speed`;
-
-    // Extract domain from URL
-    let domain = context.websiteUrl;
-    try {
-      const url = new URL(context.websiteUrl.startsWith('http') ? context.websiteUrl : `https://${context.websiteUrl}`);
-      domain = url.hostname.replace(/^www\./, '');
-    } catch {
-      // Keep original if URL parsing fails
-    }
 
     // Singular/plural for issues
     const issueCount = context.annotationLabels.length || context.problemCount || 1;
     const issueWord = issueCount === 1 ? 'issue' : 'issues';
 
-    // Get conversion loss percentage based on load time
-    const getConversionLoss = (seconds: number): string => {
-      if (seconds <= 3) return "that's likely costing you 10-15% of your conversions before visitors even see your offer";
-      if (seconds <= 5) return "that's likely costing you 20-25% of your conversions before visitors even see your offer";
-      if (seconds <= 8) return "that's likely costing you 30-35% of your conversions before visitors even see your offer";
-      if (seconds <= 12) return "that's likely costing you 40-50% of your conversions before visitors even see your offer";
-      return "that's likely costing you 50%+ of your conversions before visitors even see your offer";
+    // Industry thresholds - only use metrics BELOW these values
+    const thresholds: Record<string, number> = {
+      'Performance Score': 50,
+      'Accessibility Score': 70,
+      'SEO Score': 80,
+      'Best Practices Score': 70,
     };
 
-    // Build body with load time and conversion impact
-    const loadTimeText = context.loadTimeSeconds
-      ? `Your homepage takes ${context.loadTimeSeconds} seconds to load, ${getConversionLoss(context.loadTimeSeconds)}.`
-      : `I found ${context.problemCount} area${context.problemCount !== 1 ? 's' : ''} that could be improved.`;
+    // Parse diagnostics to find poorest PageSpeed score that's BELOW threshold
+    const pageSpeedMetrics = ['Performance Score', 'Accessibility Score', 'SEO Score', 'Best Practices Score'];
+    let poorestPoorMetric: { name: string; score: number } | null = null;
+
+    const diagParts = context.diagnosticsSummary.split(' | ');
+    for (const part of diagParts) {
+      const match = part.match(/^(.+?):\s*\w+\s*\((\d+)\/100\)/);
+      if (match && pageSpeedMetrics.includes(match[1])) {
+        const score = parseInt(match[2], 10);
+        const threshold = thresholds[match[1]] || 70;
+        // Only consider if BELOW threshold (genuinely poor)
+        if (score < threshold) {
+          if (!poorestPoorMetric || score < poorestPoorMetric.score) {
+            poorestPoorMetric = { name: match[1], score };
+          }
+        }
+      }
+    }
+
+    // Build intro based on genuinely poor metrics
+    let introText: string;
+    let subject: string;
+
+    if (poorestPoorMetric) {
+      const metricLabel = poorestPoorMetric.name.replace(' Score', '').toLowerCase();
+      const impacts: Record<string, string> = {
+        'Performance Score': "that's likely costing you conversions before visitors even see your offer",
+        'Accessibility Score': "that's likely turning away visitors who can't easily use your site",
+        'SEO Score': "that's likely hurting your visibility in search results",
+        'Best Practices Score': "that could be affecting your site's security and user trust",
+      };
+      const impact = impacts[poorestPoorMetric.name] || "that could be affecting your conversions";
+      introText = `Your website scores ${poorestPoorMetric.score}/100 on ${metricLabel}, ${impact}.`;
+      subject = `${context.companyName}'s website ${metricLabel}`;
+    } else {
+      // All metrics are good - generic intro
+      introText = `I ran a quick audit on your website and found some conversion opportunities.`;
+      subject = `${context.companyName}'s website`;
+    }
 
     const body = `Hi ${firstName},
 
-${loadTimeText}
+${introText}
 
 Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]

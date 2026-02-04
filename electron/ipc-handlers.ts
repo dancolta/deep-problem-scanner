@@ -54,6 +54,69 @@ function getElementFallbackSelector(issueLabel: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Returns a random integer between min and max (inclusive)
+ */
+function getRandomInterval(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Validates if a given datetime is in the future for a specific timezone.
+ * @param dateStr - Date string in YYYY-MM-DD format
+ * @param hour - Hour in 24-hour format (0-23)
+ * @param targetTimezone - IANA timezone string (e.g., 'America/New_York')
+ * @returns true if the selected time is in the future for that timezone
+ */
+function isValidFutureTimeInTimezone(dateStr: string, hour: number, targetTimezone: string): boolean {
+  // Get current time in target timezone
+  const now = new Date();
+  const nowInTimezone = new Date(now.toLocaleString('en-US', { timeZone: targetTimezone }));
+
+  // Parse the selected datetime in the target timezone
+  // Create a date object for the selected date/hour in the target timezone
+  const selectedDatetime = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00`);
+
+  // To properly compare, we need to interpret selectedDatetime as being in targetTimezone
+  // Convert the selected time to UTC by finding the offset
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: targetTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  // Format current time in target timezone for comparison
+  const parts = formatter.formatToParts(now);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '0';
+
+  const currentYear = parseInt(getPart('year'));
+  const currentMonth = parseInt(getPart('month'));
+  const currentDay = parseInt(getPart('day'));
+  const currentHour = parseInt(getPart('hour'));
+  const currentMinute = parseInt(getPart('minute'));
+
+  // Parse selected date
+  const [selectedYear, selectedMonth, selectedDay] = dateStr.split('-').map(Number);
+
+  // Compare dates first
+  if (selectedYear > currentYear) return true;
+  if (selectedYear < currentYear) return false;
+
+  if (selectedMonth > currentMonth) return true;
+  if (selectedMonth < currentMonth) return false;
+
+  if (selectedDay > currentDay) return true;
+  if (selectedDay < currentDay) return false;
+
+  // Same day - compare hours (allow some buffer for the current minute)
+  return hour > currentHour || (hour === currentHour && currentMinute < 5);
+}
+
 export function registerAllHandlers(): void {
   const registry = ServiceRegistry.getInstance();
 
@@ -151,6 +214,47 @@ export function registerAllHandlers(): void {
     }
   });
 
+  // --- PageSpeed ---
+  ipcMain.handle(IPC_CHANNELS.PAGESPEED_TEST_KEY, async (_event, apiKey: string) => {
+    try {
+      // Test with a simple, fast-loading page
+      const testUrl = 'https://example.com';
+      const params = new URLSearchParams({
+        url: testUrl,
+        strategy: 'desktop',
+        category: 'performance',
+        key: apiKey,
+      });
+
+      const response = await fetch(
+        `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?${params.toString()}`
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        const errorMsg = errorData.error?.message || `API returned ${response.status}`;
+        if (response.status === 400 && errorMsg.includes('API key')) {
+          return { success: false, error: 'Invalid API key' };
+        }
+        if (response.status === 403) {
+          return { success: false, error: 'API key not authorized for PageSpeed Insights API' };
+        }
+        return { success: false, error: errorMsg };
+      }
+
+      const data = await response.json();
+      const score = data.lighthouseResult?.categories?.performance?.score;
+
+      if (score !== undefined) {
+        return { success: true, score: Math.round(score * 100) };
+      }
+
+      return { success: false, error: 'Invalid response from PageSpeed API' };
+    } catch (error: any) {
+      return { success: false, error: error?.message || String(error) };
+    }
+  });
+
   // --- Sheets test ---
   ipcMain.handle(IPC_CHANNELS.SHEETS_TEST, async (_event, spreadsheetId: string) => {
     try {
@@ -174,7 +278,8 @@ export function registerAllHandlers(): void {
     IPC_CHANNELS.SCAN_START,
     async (event, { leads, spreadsheetId }: { leads: any[]; spreadsheetId?: string }) => {
       try {
-        // Load settings for API key
+        // Load settings for API keys
+        let pageSpeedApiKey: string | undefined;
         try {
           const settingsPath = path.join(app.getPath('userData'), 'settings.json');
           const settingsContent = await fs.readFile(settingsPath, 'utf-8');
@@ -182,6 +287,10 @@ export function registerAllHandlers(): void {
           if (settings.geminiApiKey) {
             process.env.GEMINI_API_KEY = settings.geminiApiKey;
             console.log('[IPC] Synced GEMINI_API_KEY from settings.json');
+          }
+          if (settings.pageSpeedApiKey) {
+            pageSpeedApiKey = settings.pageSpeedApiKey;
+            console.log('[IPC] Loaded PageSpeed API key from settings.json');
           }
         } catch {
           // settings.json may not exist yet
@@ -194,6 +303,7 @@ export function registerAllHandlers(): void {
         const sheets = await registry.getSheets();
         const gmail = await registry.getAuthenticatedGmail();
         const emailGen = registry.emailGenerator;
+        const pageSpeed = registry.getPageSpeed(pageSpeedApiKey);
 
         const results: any[] = [];
         const window = BrowserWindow.fromWebContents(event.sender);
@@ -220,6 +330,10 @@ export function registerAllHandlers(): void {
           sendPhaseProgress('opening_page', i, lead.website_url);
 
           try {
+            // Start PageSpeed fetch in parallel (runs while we open page and do AI analysis)
+            console.log(`[IPC] Starting PageSpeed fetch for ${lead.website_url}`);
+            const pageSpeedPromise = pageSpeed.getScores(lead.website_url, 'desktop');
+
             // 1. Open page and get viewport screenshot
             console.time(`[IPC] scan-${i}`);
             const session = await scanner.openPageForAnalysis(lead.website_url);
@@ -417,14 +531,59 @@ export function registerAllHandlers(): void {
             }
             console.timeEnd(`[IPC] drive-${i}`);
 
-            // 5. Generate email with issue details (using verified data)
+            // 5. Generate email with issue details (using PageSpeed scores)
             sendPhaseProgress('generating_email', i, lead.website_url);
             console.time(`[IPC] email-${i}`);
+
+            // Wait for PageSpeed results (started in parallel earlier)
+            console.log(`[IPC] ========== PAGESPEED DEBUG ==========`);
+            const pageSpeedResult = await pageSpeedPromise;
+            console.log(`[IPC] PageSpeed result:`, JSON.stringify(pageSpeedResult, null, 2));
+            let diagnosticsForEmail = session.diagnostics;
+
+            if (pageSpeedResult.success && pageSpeedResult.scores) {
+              // Check for 0 performance score - indicates something failed, skip this lead
+              if (pageSpeedResult.scores.performance === 0) {
+                console.log(`[IPC] ⚠️ SKIPPING LEAD: Performance score is 0 (likely a failed scan)`);
+                await scanner.closePageSession(session);
+                results.push({
+                  lead,
+                  scanStatus: 'SKIPPED',
+                  sheetRow: {
+                    company_name: lead.company_name,
+                    website_url: lead.website_url,
+                    contact_name: lead.contact_name,
+                    contact_email: lead.contact_email,
+                    scan_status: 'SKIPPED',
+                    screenshot_url: '',
+                    diagnostics_summary: 'PageSpeed returned 0 score - scan failed',
+                    email_subject: '',
+                    email_body: '',
+                    email_status: 'skip' as const,
+                  },
+                  issueCount: 0,
+                });
+                continue;
+              }
+
+              // Use PageSpeed scores as diagnostics
+              diagnosticsForEmail = pageSpeed.scoresToDiagnostics(pageSpeedResult.scores);
+              console.log(`[IPC] ✅ USING PAGESPEED SCORES:`);
+              console.log(`[IPC]   Performance: ${pageSpeedResult.scores.performance}/100`);
+              console.log(`[IPC]   Accessibility: ${pageSpeedResult.scores.accessibility}/100`);
+              console.log(`[IPC]   SEO: ${pageSpeedResult.scores.seo}/100`);
+              console.log(`[IPC]   Best Practices: ${pageSpeedResult.scores.bestPractices}/100`);
+            } else {
+              console.log(`[IPC] ❌ PAGESPEED FAILED: ${pageSpeedResult.error}`);
+              console.log(`[IPC] Using fallback scanner diagnostics instead`);
+            }
+            console.log(`[IPC] ======================================`);
+
             const promptContext = buildPromptContext({
               companyName: lead.company_name,
               contactName: lead.contact_name,
               websiteUrl: lead.website_url,
-              diagnostics: session.diagnostics,
+              diagnostics: diagnosticsForEmail,
               screenshotUrl: driveResults[0]?.directLink || '',
               annotationLabels: annotationLabels,
             });
@@ -451,7 +610,7 @@ export function registerAllHandlers(): void {
               contact_email: lead.contact_email,
               scan_status: 'SUCCESS',
               screenshot_url: driveResults.map(r => r.directLink).join(' | '),
-              diagnostics_summary: buildDiagnosticsSummary(session.diagnostics),
+              diagnostics_summary: buildDiagnosticsSummary(diagnosticsForEmail),
               email_subject: email.subject,
               email_body: email.body,
               email_status: 'draft' as const,
@@ -540,8 +699,33 @@ export function registerAllHandlers(): void {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.SHEETS_UPDATE_ROW, async (_event, spreadsheetId: string, rowIndex: number, updates: Record<string, any>) => {
+  ipcMain.handle(IPC_CHANNELS.SHEETS_UPDATE_ROW, async (_event, arg1: any, arg2?: number, arg3?: Record<string, any>) => {
     try {
+      // Support both calling conventions:
+      // 1. Object: { spreadsheetId, rowIndex, updates }
+      // 2. Separate args: spreadsheetId, rowIndex, updates
+      let spreadsheetId: string;
+      let rowIndex: number;
+      let updates: Record<string, any>;
+
+      if (typeof arg1 === 'object' && arg1.spreadsheetId !== undefined) {
+        // Called with object
+        spreadsheetId = arg1.spreadsheetId;
+        rowIndex = arg1.rowIndex;
+        updates = arg1.updates;
+      } else {
+        // Called with separate args
+        spreadsheetId = arg1;
+        rowIndex = arg2!;
+        updates = arg3!;
+      }
+
+      // Validate rowIndex to prevent writing to wrong rows
+      if (typeof rowIndex !== 'number' || isNaN(rowIndex) || rowIndex < 0) {
+        console.error(`[IPC] Invalid rowIndex: ${rowIndex}`);
+        return { success: false, error: `Invalid row index: ${rowIndex}` };
+      }
+
       const sheets = await registry.getSheets();
       console.log(`[IPC] Updating row ${rowIndex} with:`, updates);
       await sheets.updateRowStatus(spreadsheetId, rowIndex, updates as any);
@@ -570,30 +754,50 @@ export function registerAllHandlers(): void {
       const gmail = await registry.getAuthenticatedGmail();
       const rows = await sheets.readRows(spreadsheetId);
 
-      // Filter for draft or approved emails
-      const drafts = rows.filter((r: any) =>
-        r.email_status === 'draft' || r.email_status === 'approved'
-      );
+      // Filter for draft or approved emails WITH actual lead data
+      // This prevents scheduling empty/orphan rows that somehow have draft status
+      console.log(`[IPC] Total rows from sheet: ${rows.length}`);
+      const drafts = rows.filter((r: any, idx: number) => {
+        const hasValidStatus = r.email_status === 'draft' || r.email_status === 'approved';
+        const hasCompanyName = Boolean(r.company_name?.trim());
+        const hasContactEmail = Boolean(r.contact_email?.trim());
+        const hasEmailContent = Boolean(r.email_subject?.trim() || r.email_body?.trim());
+        const isValid = hasValidStatus && hasCompanyName && hasContactEmail && hasEmailContent;
+        if (hasValidStatus && !isValid) {
+          console.log(`[IPC] Row ${idx} EXCLUDED: status=${r.email_status}, company=${r.company_name}, email=${r.contact_email}`);
+        }
+        return isValid;
+      });
+      console.log(`[IPC] Valid drafts after filter: ${drafts.length}`);
 
       if (drafts.length === 0) {
         return { success: false, error: 'No draft emails to schedule' };
       }
 
-      // Calculate scheduled times
+      // Get scheduling parameters with defaults
       const startDate = config?.scheduleStartDate || new Date().toISOString().split('T')[0];
       const startHour = config?.scheduleStartHour ?? settings.scheduleStartHour ?? 9;
       const endHour = config?.scheduleEndHour ?? settings.scheduleEndHour ?? 17;
-      const emailsPerHour = config?.emailsPerHour ?? settings.emailsPerHour ?? 4;
+      const timezone = settings.timezone || 'America/New_York';
 
-      const intervalMinutes = Math.max(5, Math.floor(60 / emailsPerHour));
+      // New random interval parameters (replacing emailsPerHour and distributionPattern)
+      const minIntervalMinutes = config?.minIntervalMinutes ?? settings.minIntervalMinutes ?? 10;
+      const maxIntervalMinutes = config?.maxIntervalMinutes ?? settings.maxIntervalMinutes ?? 20;
+
+      // Validate that start time is in the future for the lead's timezone
+      if (!isValidFutureTimeInTimezone(startDate, startHour, timezone)) {
+        return {
+          success: false,
+          error: `The scheduled start time (${startDate} at ${startHour}:00) is in the past for timezone ${timezone}. Please select a future date and time.`,
+        };
+      }
 
       const schedulerConfig = {
-        intervalMinutes,
-        timezone: settings.timezone || 'America/New_York',
+        intervalMinutes: minIntervalMinutes, // Base interval for scheduler
+        timezone,
         maxRetries: 3,
         startHour,
         endHour,
-        distributionPattern: config?.distributionPattern ?? settings.distributionPattern ?? 'spread',
       };
 
       const scheduler = registry.getScheduler(schedulerConfig);
@@ -602,16 +806,44 @@ export function registerAllHandlers(): void {
       const startDateTime = new Date(`${startDate}T${String(startHour).padStart(2, '0')}:00:00`);
       const startTime = startDateTime.getTime();
 
-      // Convert drafts to EmailDraft format and schedule
+      // Convert drafts to EmailDraft format and schedule with random intervals
+      // First email: sent at scheduled start time
+      // Each subsequent email: previous send time + random interval
+      let currentScheduledTime = startTime;
+
+      console.log(`[IPC] Using interval range: ${minIntervalMinutes}-${maxIntervalMinutes} minutes`);
       const emailDrafts = drafts.map((row: any, index: number) => {
-        const scheduledTime = new Date(startTime + index * intervalMinutes * 60_000);
+        // First email goes at start time, subsequent emails get random interval
+        let randomInterval = 0;
+        if (index > 0) {
+          randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
+          currentScheduledTime += randomInterval * 60_000; // Convert minutes to milliseconds
+        }
+
+        const scheduledTime = new Date(currentScheduledTime);
+
+        // Format scheduled time in lead's timezone for readability
+        const formattedTime = scheduledTime.toLocaleString('en-CA', {
+          timeZone: timezone,
+          year: 'numeric',
+          month: '2-digit',
+          day: '2-digit',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit',
+          hour12: false,
+        }).replace(', ', '|');
+        const tzShort = timezone.split('/').pop()?.replace(/_/g, ' ') || timezone;
+        const readableScheduledTime = `${formattedTime} (${tzShort})`;
+
+        console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${readableScheduledTime} (interval: +${randomInterval}min)`);
 
         // Update sheet row with scheduled status
         const rowIndex = rows.indexOf(row);
         if (rowIndex >= 0) {
           sheets.updateRowStatus(spreadsheetId, rowIndex, {
             email_status: 'scheduled',
-            scheduled_time: scheduledTime.toISOString(),
+            scheduled_time: readableScheduledTime,
           } as any).catch((err: any) => console.error('[IPC] Failed to update row:', err));
         }
 
@@ -627,12 +859,13 @@ export function registerAllHandlers(): void {
             contact_email: row.contact_email,
           },
           status: 'scheduled' as const,
+          scheduledAt: scheduledTime.getTime(), // Include scheduled time for each email
         };
       });
 
       scheduler.addToQueue(emailDrafts as any, startTime);
 
-      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${startDateTime.toISOString()})`);
+      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${startDateTime.toISOString()}, interval: ${minIntervalMinutes}-${maxIntervalMinutes} min)`);
 
       // Start the scheduler with send function
       const sendFn = async (draft: any) => {

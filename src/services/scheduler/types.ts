@@ -17,7 +17,8 @@ export interface SchedulerConfig {
   maxRetries: number; // default 3
   startHour: number; // default 9
   endHour: number; // default 17
-  distributionPattern: 'spread' | 'burst'; // default 'spread'
+  minIntervalMinutes?: number;  // Minimum interval between emails (default 10)
+  maxIntervalMinutes?: number;  // Maximum interval between emails (default 20)
 }
 
 export interface SchedulerStatus {

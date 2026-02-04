@@ -8,6 +8,7 @@ import { LeadPipeline } from '../src/services/csv/lead-pipeline';
 import { CsvParser } from '../src/services/csv/csv-parser';
 import { GmailService } from '../src/services/google/gmail';
 import { EmailScheduler } from '../src/services/scheduler/email-scheduler';
+import { PageSpeedService } from '../src/services/pagespeed/pagespeed-service';
 import type { SchedulerConfig } from '../src/services/scheduler/types';
 
 export class ServiceRegistry {
@@ -19,6 +20,7 @@ export class ServiceRegistry {
   private _emailGenerator: EmailGenerator | null = null;
   private _csvParser: CsvParser | null = null;
   private _scheduler: EmailScheduler | null = null;
+  private _pageSpeed: PageSpeedService | null = null;
 
   private constructor() {}
 
@@ -98,7 +100,8 @@ export class ServiceRegistry {
         maxRetries: 3,
         startHour: 9,
         endHour: 17,
-        distributionPattern: 'spread',
+        minIntervalMinutes: 10,
+        maxIntervalMinutes: 20,
       });
     }
     return this._scheduler;
@@ -106,5 +109,16 @@ export class ServiceRegistry {
 
   getLeadPipeline(sheets?: SheetsService): LeadPipeline {
     return new LeadPipeline(sheets);
+  }
+
+  getPageSpeed(apiKey?: string): PageSpeedService {
+    // Always create new instance if API key provided (might have changed)
+    if (apiKey) {
+      this._pageSpeed = new PageSpeedService(apiKey);
+    }
+    if (!this._pageSpeed) {
+      this._pageSpeed = new PageSpeedService();
+    }
+    return this._pageSpeed;
   }
 }

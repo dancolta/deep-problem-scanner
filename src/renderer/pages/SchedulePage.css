@@ -386,3 +386,90 @@
   background: #27ae6022;
   color: #27ae60;
 }
+
+/* Interval Range Inputs */
+.config-field--interval-range {
+  grid-column: span 2;
+}
+
+.interval-range-inputs {
+  display: flex;
+  gap: 16px;
+}
+
+.interval-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.interval-input-group .interval-label {
+  font-size: 0.75rem;
+  color: #888;
+  min-width: 28px;
+}
+
+.interval-input-group input[type="number"] {
+  flex: 1;
+  padding: 8px 10px;
+  background: #16213e;
+  border: 1px solid #2c2c54;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.interval-input-group input[type="number"]:focus {
+  border-color: #3498db;
+}
+
+.interval-input-group input[type="number"]:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Dual Timezone Display in Table */
+.dual-timezone-cell {
+  white-space: normal !important;
+  min-width: 160px;
+  max-width: none !important;
+}
+
+.tz-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.4;
+}
+
+.tz-row--local {
+  color: #ccc;
+}
+
+.tz-row--lead {
+  color: #888;
+  font-size: 0.75rem;
+  margin-top: 2px;
+}
+
+.tz-label {
+  font-weight: 500;
+  color: #666;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2px;
+}
+
+.tz-row--local .tz-label {
+  color: #888;
+}
+
+.tz-row--lead .tz-label {
+  color: #555;
+}
+
+.tz-value {
+  color: inherit;
+}

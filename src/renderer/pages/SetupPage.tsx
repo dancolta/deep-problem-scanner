@@ -6,9 +6,9 @@ import './SetupPage.css';
 interface SavedSettings {
   googleSheetUrl?: string;
   concurrency?: number;
-  sendIntervalMinutes?: number;
   timezone?: string;
   geminiApiKey?: string;
+  pageSpeedApiKey?: string;
   customEmailTemplate?: string;
 }
 
@@ -21,12 +21,14 @@ export default function SetupPage() {
   // Settings state
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [pageSpeedApiKey, setPageSpeedApiKey] = useState('');
+  const [showPageSpeedKey, setShowPageSpeedKey] = useState(false);
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetId, setSheetId] = useState('');
   const [concurrency, setConcurrency] = useState(2);
-  const [sendInterval, setSendInterval] = useState(15);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [geminiStatus, setGeminiStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
+  const [pageSpeedStatus, setPageSpeedStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
   const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
   const [sheetError, setSheetError] = useState<string | null>(null);
 
@@ -100,10 +102,13 @@ export default function SetupPage() {
         const s = result.settings;
         setSheetUrl(s.googleSheetUrl || '');
         setConcurrency(s.concurrency || 2);
-        setSendInterval(s.sendIntervalMinutes || 15);
         if (s.geminiApiKey) {
           setGeminiApiKey(s.geminiApiKey);
           setGeminiStatus('valid'); // Was saved previously, assume valid
+        }
+        if (s.pageSpeedApiKey) {
+          setPageSpeedApiKey(s.pageSpeedApiKey);
+          setPageSpeedStatus('valid'); // Was saved previously, assume valid
         }
         if (s.customEmailTemplate) {
           setEmailTemplate(s.customEmailTemplate);
@@ -156,6 +161,17 @@ export default function SetupPage() {
     }
   }
 
+  async function handleTestPageSpeed() {
+    if (!pageSpeedApiKey) return;
+    setPageSpeedStatus('testing');
+    try {
+      const result = await ipc<{ success: boolean; score?: number; error?: string }>(IPC_CHANNELS.PAGESPEED_TEST_KEY, pageSpeedApiKey);
+      setPageSpeedStatus(result?.success ? 'valid' : 'invalid');
+    } catch {
+      setPageSpeedStatus('invalid');
+    }
+  }
+
   async function handleTestSheet() {
     if (!sheetId) return;
     setSheetStatus('testing');
@@ -180,9 +196,9 @@ export default function SetupPage() {
       await ipc(IPC_CHANNELS.SETTINGS_SET, {
         googleSheetUrl: sheetUrl,
         concurrency,
-        sendIntervalMinutes: sendInterval,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         geminiApiKey,
+        pageSpeedApiKey,
       });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -266,6 +282,48 @@ export default function SetupPage() {
           )}
         </div>
 
+        {/* PageSpeed API Key */}
+        <div className="setup-card">
+          <h3>PageSpeed API Key</h3>
+          <p className="hint-text" style={{ marginBottom: '10px' }}>
+            Required for website performance scores. <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>Get API Key</a>
+          </p>
+          <div className="input-group">
+            <input
+              type={showPageSpeedKey ? 'text' : 'password'}
+              value={pageSpeedApiKey}
+              onChange={(e) => { setPageSpeedApiKey(e.target.value); setPageSpeedStatus('untested'); }}
+              placeholder="AIza..."
+              className="input"
+            />
+            <button className="btn btn--icon" onClick={() => setShowPageSpeedKey(!showPageSpeedKey)}>
+              {showPageSpeedKey ? 'Hide' : 'Show'}
+            </button>
+            <button
+              className="btn btn--outline"
+              onClick={handleTestPageSpeed}
+              disabled={!pageSpeedApiKey || pageSpeedStatus === 'testing'}
+            >
+              {pageSpeedStatus === 'testing' ? 'Testing...' : 'Test Key'}
+            </button>
+          </div>
+          {pageSpeedStatus === 'valid' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--green" />
+              <span style={{ color: '#10b981' }}>Valid API key</span>
+            </div>
+          )}
+          {pageSpeedStatus === 'invalid' && (
+            <div className="status-row" style={{ marginTop: '10px' }}>
+              <span className="status-dot status-dot--red" />
+              <span style={{ color: '#ef4444' }}>Invalid API key - enable PageSpeed Insights API in Google Cloud</span>
+            </div>
+          )}
+          <p className="hint-text" style={{ marginTop: '8px' }}>
+            Enable "PageSpeed Insights API" in Google Cloud Console for this key.
+          </p>
+        </div>
+
         {/* Google Sheet URL */}
         <div className="setup-card">
           <h3>Google Sheet URL</h3>
@@ -321,17 +379,6 @@ export default function SetupPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="settings-row">
-            <label>Send Interval (minutes)</label>
-            <input
-              type="number"
-              value={sendInterval}
-              min={5}
-              max={60}
-              onChange={(e) => setSendInterval(Number(e.target.value))}
-              className="input input--small"
-            />
           </div>
         </div>
 
