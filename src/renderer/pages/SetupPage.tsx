@@ -6,7 +6,6 @@ import './SetupPage.css';
 interface SavedSettings {
   googleSheetUrl?: string;
   concurrency?: number;
-  sendIntervalMinutes?: number;
   timezone?: string;
   geminiApiKey?: string;
   customEmailTemplate?: string;
@@ -24,7 +23,6 @@ export default function SetupPage() {
   const [sheetUrl, setSheetUrl] = useState('');
   const [sheetId, setSheetId] = useState('');
   const [concurrency, setConcurrency] = useState(2);
-  const [sendInterval, setSendInterval] = useState(15);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [geminiStatus, setGeminiStatus] = useState<'untested' | 'testing' | 'valid' | 'invalid'>('untested');
   const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
@@ -100,7 +98,6 @@ export default function SetupPage() {
         const s = result.settings;
         setSheetUrl(s.googleSheetUrl || '');
         setConcurrency(s.concurrency || 2);
-        setSendInterval(s.sendIntervalMinutes || 15);
         if (s.geminiApiKey) {
           setGeminiApiKey(s.geminiApiKey);
           setGeminiStatus('valid'); // Was saved previously, assume valid
@@ -180,7 +177,6 @@ export default function SetupPage() {
       await ipc(IPC_CHANNELS.SETTINGS_SET, {
         googleSheetUrl: sheetUrl,
         concurrency,
-        sendIntervalMinutes: sendInterval,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         geminiApiKey,
       });
@@ -321,17 +317,6 @@ export default function SetupPage() {
                 </option>
               ))}
             </select>
-          </div>
-          <div className="settings-row">
-            <label>Send Interval (minutes)</label>
-            <input
-              type="number"
-              value={sendInterval}
-              min={5}
-              max={60}
-              onChange={(e) => setSendInterval(Number(e.target.value))}
-              className="input input--small"
-            />
           </div>
         </div>
 

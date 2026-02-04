@@ -54,6 +54,69 @@ function getElementFallbackSelector(issueLabel: string): string | undefined {
   return undefined;
 }
 
+/**
+ * Returns a random integer between min and max (inclusive)
+ */
+function getRandomInterval(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/**
+ * Validates if a given datetime is in the future for a specific timezone.
+ * @param dateStr - Date string in YYYY-MM-DD format
+ * @param hour - Hour in 24-hour format (0-23)
+ * @param targetTimezone - IANA timezone string (e.g., 'America/New_York')
+ * @returns true if the selected time is in the future for that timezone
+ */
+function isValidFutureTimeInTimezone(dateStr: string, hour: number, targetTimezone: string): boolean {
+  // Get current time in target timezone
+  const now = new Date();
+  const nowInTimezone = new Date(now.toLocaleString('en-US', { timeZone: targetTimezone }));
+
+  // Parse the selected datetime in the target timezone
+  // Create a date object for the selected date/hour in the target timezone
+  const selectedDatetime = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00`);
+
+  // To properly compare, we need to interpret selectedDatetime as being in targetTimezone
+  // Convert the selected time to UTC by finding the offset
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: targetTimezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+
+  // Format current time in target timezone for comparison
+  const parts = formatter.formatToParts(now);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '0';
+
+  const currentYear = parseInt(getPart('year'));
+  const currentMonth = parseInt(getPart('month'));
+  const currentDay = parseInt(getPart('day'));
+  const currentHour = parseInt(getPart('hour'));
+  const currentMinute = parseInt(getPart('minute'));
+
+  // Parse selected date
+  const [selectedYear, selectedMonth, selectedDay] = dateStr.split('-').map(Number);
+
+  // Compare dates first
+  if (selectedYear > currentYear) return true;
+  if (selectedYear < currentYear) return false;
+
+  if (selectedMonth > currentMonth) return true;
+  if (selectedMonth < currentMonth) return false;
+
+  if (selectedDay > currentDay) return true;
+  if (selectedDay < currentDay) return false;
+
+  // Same day - compare hours (allow some buffer for the current minute)
+  return hour > currentHour || (hour === currentHour && currentMinute < 5);
+}
+
 export function registerAllHandlers(): void {
   const registry = ServiceRegistry.getInstance();
 
@@ -579,21 +642,30 @@ export function registerAllHandlers(): void {
         return { success: false, error: 'No draft emails to schedule' };
       }
 
-      // Calculate scheduled times
+      // Get scheduling parameters with defaults
       const startDate = config?.scheduleStartDate || new Date().toISOString().split('T')[0];
       const startHour = config?.scheduleStartHour ?? settings.scheduleStartHour ?? 9;
       const endHour = config?.scheduleEndHour ?? settings.scheduleEndHour ?? 17;
-      const emailsPerHour = config?.emailsPerHour ?? settings.emailsPerHour ?? 4;
+      const timezone = settings.timezone || 'America/New_York';
 
-      const intervalMinutes = Math.max(5, Math.floor(60 / emailsPerHour));
+      // New random interval parameters (replacing emailsPerHour and distributionPattern)
+      const minIntervalMinutes = config?.minIntervalMinutes ?? settings.minIntervalMinutes ?? 10;
+      const maxIntervalMinutes = config?.maxIntervalMinutes ?? settings.maxIntervalMinutes ?? 20;
+
+      // Validate that start time is in the future for the lead's timezone
+      if (!isValidFutureTimeInTimezone(startDate, startHour, timezone)) {
+        return {
+          success: false,
+          error: `The scheduled start time (${startDate} at ${startHour}:00) is in the past for timezone ${timezone}. Please select a future date and time.`,
+        };
+      }
 
       const schedulerConfig = {
-        intervalMinutes,
-        timezone: settings.timezone || 'America/New_York',
+        intervalMinutes: minIntervalMinutes, // Base interval for scheduler
+        timezone,
         maxRetries: 3,
         startHour,
         endHour,
-        distributionPattern: config?.distributionPattern ?? settings.distributionPattern ?? 'spread',
       };
 
       const scheduler = registry.getScheduler(schedulerConfig);
@@ -602,9 +674,19 @@ export function registerAllHandlers(): void {
       const startDateTime = new Date(`${startDate}T${String(startHour).padStart(2, '0')}:00:00`);
       const startTime = startDateTime.getTime();
 
-      // Convert drafts to EmailDraft format and schedule
+      // Convert drafts to EmailDraft format and schedule with random intervals
+      // First email: sent at scheduled start time
+      // Each subsequent email: previous send time + random interval
+      let currentScheduledTime = startTime;
+
       const emailDrafts = drafts.map((row: any, index: number) => {
-        const scheduledTime = new Date(startTime + index * intervalMinutes * 60_000);
+        // First email goes at start time, subsequent emails get random interval
+        if (index > 0) {
+          const randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
+          currentScheduledTime += randomInterval * 60_000; // Convert minutes to milliseconds
+        }
+
+        const scheduledTime = new Date(currentScheduledTime);
 
         // Update sheet row with scheduled status
         const rowIndex = rows.indexOf(row);
@@ -627,12 +709,13 @@ export function registerAllHandlers(): void {
             contact_email: row.contact_email,
           },
           status: 'scheduled' as const,
+          scheduledAt: scheduledTime.getTime(), // Include scheduled time for each email
         };
       });
 
       scheduler.addToQueue(emailDrafts as any, startTime);
 
-      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${startDateTime.toISOString()})`);
+      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${startDateTime.toISOString()}, interval: ${minIntervalMinutes}-${maxIntervalMinutes} min)`);
 
       // Start the scheduler with send function
       const sendFn = async (draft: any) => {

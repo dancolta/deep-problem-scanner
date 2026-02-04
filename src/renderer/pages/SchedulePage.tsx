@@ -30,6 +30,46 @@ function isValidScheduleRow(row: SheetRow): boolean {
   return hasCompanyName && hasContactEmail && hasEmailContent;
 }
 
+/**
+ * Format a date/time string for display in a specific timezone.
+ * Returns formatted string like "Feb 15, 2:00 PM" with timezone abbreviation.
+ */
+function formatTimeInTimezone(dateStr: string | undefined, tz: string): string {
+  if (!dateStr) return '-';
+  try {
+    const date = new Date(dateStr);
+    if (isNaN(date.getTime())) return dateStr;
+    const formatted = date.toLocaleString('en-US', {
+      timeZone: tz,
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+    return formatted;
+  } catch {
+    return dateStr;
+  }
+}
+
+/**
+ * Get short timezone abbreviation (e.g., EST, PST, UTC)
+ */
+function getTimezoneAbbr(tz: string): string {
+  try {
+    const date = new Date();
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      timeZoneName: 'short',
+    }).formatToParts(date);
+    const tzPart = parts.find(p => p.type === 'timeZoneName');
+    return tzPart?.value || tz.split('/').pop()?.replace(/_/g, ' ') || tz;
+  } catch {
+    return tz.split('/').pop()?.replace(/_/g, ' ') || tz;
+  }
+}
+
 export default function SchedulePage() {
   const [emails, setEmails] = useState<SheetRow[]>([]);
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerState>('idle');
@@ -43,8 +83,8 @@ export default function SchedulePage() {
   const [startDate, setStartDate] = useState(todayStr);
   const [startHour, setStartHour] = useState(9);
   const [endHour, setEndHour] = useState(17);
-  const [emailsPerHour, setEmailsPerHour] = useState(4);
-  const [distributionPattern, setDistributionPattern] = useState<'spread' | 'burst'>('spread');
+  const [minInterval, setMinInterval] = useState(10);
+  const [maxInterval, setMaxInterval] = useState(20);
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
   const [configError, setConfigError] = useState<string | null>(null);
 
@@ -72,8 +112,8 @@ export default function SchedulePage() {
         setSettings(s);
         if (s.scheduleStartHour !== undefined) setStartHour(s.scheduleStartHour);
         if (s.scheduleEndHour !== undefined) setEndHour(s.scheduleEndHour);
-        if (s.emailsPerHour !== undefined) setEmailsPerHour(s.emailsPerHour);
-        if (s.distributionPattern) setDistributionPattern(s.distributionPattern);
+        if ((s as any).minIntervalMinutes !== undefined) setMinInterval((s as any).minIntervalMinutes);
+        if ((s as any).maxIntervalMinutes !== undefined) setMaxInterval((s as any).maxIntervalMinutes);
         if (s.timezone) setTimezone(s.timezone);
         if ((s as any).scheduleStartDate) setStartDate((s as any).scheduleStartDate);
         const match = s.googleSheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -135,8 +175,8 @@ export default function SchedulePage() {
         scheduleStartDate: startDate,
         scheduleStartHour: startHour,
         scheduleEndHour: endHour,
-        emailsPerHour,
-        distributionPattern,
+        minIntervalMinutes: minInterval,
+        maxIntervalMinutes: maxInterval,
         timezone,
       };
       await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_SET, updated);
@@ -146,14 +186,21 @@ export default function SchedulePage() {
   };
 
   const handleStart = async () => {
-    // Validate start date+hour is not in the past
-    const selectedStart = new Date(`${startDate}T${String(startHour).padStart(2, '0')}:00:00`);
-    if (selectedStart < new Date()) {
-      setConfigError('Start date and hour cannot be in the past.');
+    // Validate start date+hour is not in the past for the target timezone
+    const targetNow = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
+    const selectedStartStr = `${startDate}T${String(startHour).padStart(2, '0')}:00:00`;
+    const selectedStart = new Date(selectedStartStr);
+    if (selectedStart < targetNow) {
+      const tzLabel = timezone.replace(/_/g, ' ');
+      setConfigError(`Start time cannot be in the past for the selected timezone (${tzLabel}).`);
       return;
     }
     if (endHour <= startHour) {
       setConfigError('End hour must be after start hour.');
+      return;
+    }
+    if (minInterval > maxInterval) {
+      setConfigError('Minimum interval cannot be greater than maximum interval.');
       return;
     }
     setConfigError(null);
@@ -162,8 +209,8 @@ export default function SchedulePage() {
       scheduleStartDate: startDate,
       scheduleStartHour: startHour,
       scheduleEndHour: endHour,
-      emailsPerHour,
-      distributionPattern,
+      minIntervalMinutes: minInterval,
+      maxIntervalMinutes: maxInterval,
     });
     setSchedulerStatus('running');
     addLogEntry('Scheduler started');
@@ -229,46 +276,35 @@ export default function SchedulePage() {
               ))}
             </select>
           </div>
-          <div className="config-field">
-            <label>Emails Per Hour</label>
-            <input
-              type="number"
-              min={1}
-              max={60}
-              value={emailsPerHour}
-              onChange={e => setEmailsPerHour(Math.max(1, Math.min(60, Number(e.target.value))))}
-              disabled={schedulerStatus === 'running'}
-            />
-          </div>
-          <div className="config-field">
-            <label>Distribution</label>
-            <div className="radio-group">
-              <label className="radio-label">
+          <div className="config-field config-field--interval-range">
+            <label>Send Interval Range (minutes)</label>
+            <div className="interval-range-inputs">
+              <div className="interval-input-group">
+                <span className="interval-label">Min</span>
                 <input
-                  type="radio"
-                  name="distribution"
-                  value="spread"
-                  checked={distributionPattern === 'spread'}
-                  onChange={() => setDistributionPattern('spread')}
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={minInterval}
+                  onChange={e => setMinInterval(Math.max(1, Math.min(120, Number(e.target.value))))}
                   disabled={schedulerStatus === 'running'}
                 />
-                Spread evenly
-              </label>
-              <label className="radio-label">
+              </div>
+              <div className="interval-input-group">
+                <span className="interval-label">Max</span>
                 <input
-                  type="radio"
-                  name="distribution"
-                  value="burst"
-                  checked={distributionPattern === 'burst'}
-                  onChange={() => setDistributionPattern('burst')}
+                  type="number"
+                  min={1}
+                  max={120}
+                  value={maxInterval}
+                  onChange={e => setMaxInterval(Math.max(1, Math.min(120, Number(e.target.value))))}
                   disabled={schedulerStatus === 'running'}
                 />
-                Send all at once
-              </label>
+              </div>
             </div>
           </div>
           <div className="config-field">
-            <label>Timezone</label>
+            <label>Lead's Timezone</label>
             <select
               value={timezone}
               onChange={e => setTimezone(e.target.value)}
@@ -310,11 +346,9 @@ export default function SchedulePage() {
           <span>{schedulerStatus.charAt(0).toUpperCase() + schedulerStatus.slice(1)}</span>
         </div>
 
-        {settings && (
-          <span className="send-interval">
-            Interval: {settings.sendIntervalMinutes} min
-          </span>
-        )}
+        <span className="send-interval">
+          Interval: {minInterval}-{maxInterval} min
+        </span>
 
         <button
           className="btn btn-refresh"
@@ -393,7 +427,20 @@ export default function SchedulePage() {
                       {row.email_status}
                     </span>
                   </td>
-                  <td>{row.scheduled_time || '-'}</td>
+                  <td className="dual-timezone-cell">
+                    {row.scheduled_time ? (
+                      <>
+                        <div className="tz-row tz-row--local">
+                          <span className="tz-label">Your Time:</span>
+                          <span className="tz-value">{formatTimeInTimezone(row.scheduled_time, Intl.DateTimeFormat().resolvedOptions().timeZone)}</span>
+                        </div>
+                        <div className="tz-row tz-row--lead">
+                          <span className="tz-label">Lead Time:</span>
+                          <span className="tz-value">{formatTimeInTimezone(row.scheduled_time, timezone)} {getTimezoneAbbr(timezone)}</span>
+                        </div>
+                      </>
+                    ) : '-'}
+                  </td>
                   <td>{row.sent_time || '-'}</td>
                 </tr>
               ))}

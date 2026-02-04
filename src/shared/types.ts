@@ -67,8 +67,8 @@ export interface AppSettings {
   customEmailTemplate?: string;
   scheduleStartHour: number;
   scheduleEndHour: number;
-  emailsPerHour: number;
-  distributionPattern: 'spread' | 'burst';
+  minIntervalMinutes?: number;  // Minimum interval between emails (default 10)
+  maxIntervalMinutes?: number;  // Maximum interval between emails (default 20)
 }
 
 export interface EmailDraft {

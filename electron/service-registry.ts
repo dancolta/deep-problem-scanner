@@ -98,7 +98,8 @@ export class ServiceRegistry {
         maxRetries: 3,
         startHour: 9,
         endHour: 17,
-        distributionPattern: 'spread',
+        minIntervalMinutes: 10,
+        maxIntervalMinutes: 20,
       });
     }
     return this._scheduler;
