@@ -171,7 +171,8 @@ Gemini Vision analyzes hero sections for:
 - **Trust Signals** - Missing social proof, logos, or testimonials
 - **Hero Image** - Generic stock photos or missing visual content
 
-## Email Generation
+<details>
+<summary><strong>Email Generation</strong> (click to expand)</summary>
 
 ### Prompt Structure
 
@@ -288,6 +289,8 @@ PageSpeed metrics below these thresholds are flagged in outreach:
 | Accessibility Score | 80 |
 | SEO Score | 80 |
 | Best Practices Score | 80 |
+
+</details>
 
 ## License
 
