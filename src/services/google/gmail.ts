@@ -58,7 +58,7 @@ export class GmailService {
     }
   }
 
-  async createDraft(draft: EmailDraft, emailBuffer?: Buffer): Promise<{ draftId: string; threadId: string }> {
+  async createDraft(draft: EmailDraft, emailBuffer?: Buffer, fromEmail?: string): Promise<{ draftId: string; threadId: string }> {
     let imageBuffer: Buffer | null = emailBuffer ?? null;
 
     if (!imageBuffer && draft.screenshotDriveUrl) {
@@ -108,7 +108,8 @@ export class GmailService {
       htmlBody,
       imageBuffer ?? undefined,
       imageBuffer ? filename : undefined,
-      mimeType
+      mimeType,
+      fromEmail
     );
 
     try {
@@ -221,7 +222,8 @@ export class GmailService {
     htmlBody: string,
     imageBuffer?: Buffer,
     filename?: string,
-    imageMimeType: string = 'image/png'
+    imageMimeType: string = 'image/png',
+    fromEmail?: string
   ): string {
     const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
@@ -230,6 +232,11 @@ export class GmailService {
       `To: ${to}`,
       `Subject: ${subject}`,
     ];
+
+    // Add From header if a custom send-as email is specified
+    if (fromEmail) {
+      mimeLines.push(`From: ${fromEmail}`);
+    }
 
     if (imageBuffer && filename) {
       mimeLines.push(`Content-Type: multipart/related; boundary="${boundary}"`);
