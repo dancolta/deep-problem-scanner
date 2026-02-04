@@ -603,8 +603,33 @@ export function registerAllHandlers(): void {
     }
   });
 
-  ipcMain.handle(IPC_CHANNELS.SHEETS_UPDATE_ROW, async (_event, spreadsheetId: string, rowIndex: number, updates: Record<string, any>) => {
+  ipcMain.handle(IPC_CHANNELS.SHEETS_UPDATE_ROW, async (_event, arg1: any, arg2?: number, arg3?: Record<string, any>) => {
     try {
+      // Support both calling conventions:
+      // 1. Object: { spreadsheetId, rowIndex, updates }
+      // 2. Separate args: spreadsheetId, rowIndex, updates
+      let spreadsheetId: string;
+      let rowIndex: number;
+      let updates: Record<string, any>;
+
+      if (typeof arg1 === 'object' && arg1.spreadsheetId !== undefined) {
+        // Called with object
+        spreadsheetId = arg1.spreadsheetId;
+        rowIndex = arg1.rowIndex;
+        updates = arg1.updates;
+      } else {
+        // Called with separate args
+        spreadsheetId = arg1;
+        rowIndex = arg2!;
+        updates = arg3!;
+      }
+
+      // Validate rowIndex to prevent writing to wrong rows
+      if (typeof rowIndex !== 'number' || isNaN(rowIndex) || rowIndex < 0) {
+        console.error(`[IPC] Invalid rowIndex: ${rowIndex}`);
+        return { success: false, error: `Invalid row index: ${rowIndex}` };
+      }
+
       const sheets = await registry.getSheets();
       console.log(`[IPC] Updating row ${rowIndex} with:`, updates);
       await sheets.updateRowStatus(spreadsheetId, rowIndex, updates as any);
@@ -633,10 +658,21 @@ export function registerAllHandlers(): void {
       const gmail = await registry.getAuthenticatedGmail();
       const rows = await sheets.readRows(spreadsheetId);
 
-      // Filter for draft or approved emails
-      const drafts = rows.filter((r: any) =>
-        r.email_status === 'draft' || r.email_status === 'approved'
-      );
+      // Filter for draft or approved emails WITH actual lead data
+      // This prevents scheduling empty/orphan rows that somehow have draft status
+      console.log(`[IPC] Total rows from sheet: ${rows.length}`);
+      const drafts = rows.filter((r: any, idx: number) => {
+        const hasValidStatus = r.email_status === 'draft' || r.email_status === 'approved';
+        const hasCompanyName = Boolean(r.company_name?.trim());
+        const hasContactEmail = Boolean(r.contact_email?.trim());
+        const hasEmailContent = Boolean(r.email_subject?.trim() || r.email_body?.trim());
+        const isValid = hasValidStatus && hasCompanyName && hasContactEmail && hasEmailContent;
+        if (hasValidStatus && !isValid) {
+          console.log(`[IPC] Row ${idx} EXCLUDED: status=${r.email_status}, company=${r.company_name}, email=${r.contact_email}`);
+        }
+        return isValid;
+      });
+      console.log(`[IPC] Valid drafts after filter: ${drafts.length}`);
 
       if (drafts.length === 0) {
         return { success: false, error: 'No draft emails to schedule' };
@@ -679,14 +715,17 @@ export function registerAllHandlers(): void {
       // Each subsequent email: previous send time + random interval
       let currentScheduledTime = startTime;
 
+      console.log(`[IPC] Using interval range: ${minIntervalMinutes}-${maxIntervalMinutes} minutes`);
       const emailDrafts = drafts.map((row: any, index: number) => {
         // First email goes at start time, subsequent emails get random interval
+        let randomInterval = 0;
         if (index > 0) {
-          const randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
+          randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
           currentScheduledTime += randomInterval * 60_000; // Convert minutes to milliseconds
         }
 
         const scheduledTime = new Date(currentScheduledTime);
+        console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${scheduledTime.toISOString()} (interval: +${randomInterval}min)`);
 
         // Update sheet row with scheduled status
         const rowIndex = rows.indexOf(row);

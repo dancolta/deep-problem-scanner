@@ -63,11 +63,15 @@ export class EmailScheduler {
     ).length;
 
     drafts.forEach((draft, i) => {
-      const offset = (existingPendingCount + i) * intervalMs;
+      // Use pre-computed scheduledAt if available (random interval), otherwise fall back to fixed interval
+      const scheduledTime = (draft as any).scheduledAt
+        ? new Date((draft as any).scheduledAt).toISOString()
+        : new Date(now + (existingPendingCount + i) * intervalMs).toISOString();
+
       const scheduled: ScheduledEmail = {
         id: `email-${Date.now()}-${i}`,
         draft,
-        scheduledTime: new Date(now + offset).toISOString(),
+        scheduledTime,
         status: 'pending',
         attempts: 0,
       };
