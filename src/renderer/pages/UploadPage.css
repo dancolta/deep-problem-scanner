@@ -447,6 +447,116 @@
   background: var(--success);
 }
 
+/* Flagged Leads Section */
+.flagged-leads-section {
+  background: var(--warning-subtle, rgba(234, 179, 8, 0.1));
+  border: 1px solid var(--warning, #eab308);
+  border-radius: var(--radius-xl);
+  padding: 16px 20px;
+  margin-top: 8px;
+}
+
+.flagged-leads-section--cleared {
+  background: var(--bg-surface);
+  border-color: var(--border-default);
+}
+
+.flagged-leads-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.flagged-leads-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.flagged-icon {
+  font-size: 18px;
+}
+
+.flagged-leads-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.flagged-leads-list {
+  margin-top: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-subtle);
+}
+
+.flagged-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.flagged-table th {
+  background: var(--bg-elevated);
+  text-align: left;
+  padding: 10px 14px;
+  color: var(--text-tertiary);
+  font-weight: var(--font-semibold);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  position: sticky;
+  top: 0;
+}
+
+.flagged-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.flagged-table tbody tr:nth-child(even) {
+  background: var(--bg-surface);
+}
+
+.flagged-leads-hint {
+  margin: 12px 0 0;
+  font-size: 13px !important;
+  color: var(--text-tertiary) !important;
+}
+
+.text-muted {
+  color: var(--text-placeholder);
+  font-style: italic;
+}
+
+/* Warning button style */
+.btn--warning {
+  background: var(--warning, #eab308);
+  color: #1a1a1a;
+}
+
+.btn--warning:hover:not(:disabled) {
+  background: #d4a106;
+}
+
+/* Text button style */
+.btn--text {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+}
+
+.btn--text:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+}
+
 /* ============================================
    RESPONSIVE BREAKPOINTS
    ============================================ */
@@ -546,6 +656,22 @@
 
   .sheets-actions .btn {
     width: 100%;
+  }
+
+  .flagged-leads-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .flagged-leads-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .flagged-table th,
+  .flagged-table td {
+    padding: 8px 10px;
+    font-size: 12px;
   }
 }
 

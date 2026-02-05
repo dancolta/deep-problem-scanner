@@ -1,10 +1,11 @@
 import { CsvParser } from './csv-parser';
 import { Lead } from '../../shared/types';
+import { LeadValidator } from '../validation/lead-validator';
 
 export interface PipelineResult {
   leads: Lead[];
   totalParsed: number;
-  invalidLeads: { lead: Lead; reason: string }[];
+  invalidLeads: { lead: Lead; reasons: string[] }[];
   duplicateEmails: Lead[];
   alreadyScanned: Lead[];
   alreadyProcessed: number;  // Leads with "Processed" checkbox marked in source sheet
@@ -17,9 +18,11 @@ interface SheetsChecker {
 
 export class LeadPipeline {
   private csvParser: CsvParser;
+  private validator: LeadValidator;
 
   constructor(private sheetsChecker?: SheetsChecker) {
     this.csvParser = new CsvParser();
+    this.validator = new LeadValidator();
   }
 
   async processUpload(
@@ -40,11 +43,11 @@ export class LeadPipeline {
     const totalParsed = parseResult.leads.length;
     console.log(`[LeadPipeline] Parsed ${totalParsed} leads from CSV`);
 
-    // 2. Validate leads
-    const { valid, invalid } = this.csvParser.validateLeads(parseResult.leads);
+    // 2. CLEANUP: Validate and remove invalid leads (FIRST step after parsing)
+    const cleanupResult = this.validator.cleanLeads(parseResult.leads);
 
     // 3. Filter duplicate emails
-    const { unique, duplicates } = this.csvParser.filterDuplicateEmails(valid);
+    const { unique, duplicates } = this.csvParser.filterDuplicateEmails(cleanupResult.cleanedLeads);
 
     // 4. Check already scanned (via Sheets)
     let readyLeads = unique;
@@ -84,7 +87,7 @@ export class LeadPipeline {
     return {
       leads: readyLeads,
       totalParsed,
-      invalidLeads: invalid,
+      invalidLeads: cleanupResult.removedLeads,
       duplicateEmails: duplicates,
       alreadyScanned,
       alreadyProcessed: 0,  // CSV imports don't have processed checkbox

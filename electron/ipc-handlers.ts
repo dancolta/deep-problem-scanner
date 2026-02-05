@@ -740,23 +740,6 @@ export function registerAllHandlers(): void {
               );
             }
 
-            // Mark lead as processed in source sheet (if imported from Google Sheets)
-            if (lead.sourceSpreadsheetId && lead.sourceRowNumber) {
-              try {
-                const authClient = await registry.googleAuth.getAuthenticatedClient();
-                const sourceImporter = new SheetsLeadImporter(authClient);
-                await sourceImporter.markAsProcessed(
-                  lead.sourceSpreadsheetId,
-                  lead.sourceRowNumber,
-                  lead.sourceSheetName
-                );
-                console.log(`[IPC] Marked row ${lead.sourceRowNumber} as processed in source sheet`);
-              } catch (markError) {
-                // Log but don't fail the scan - processed marking is best-effort
-                console.error(`[IPC] Failed to mark lead as processed:`, markError);
-              }
-            }
-
             results.push({
               lead,
               scanStatus: 'SUCCESS',
@@ -854,6 +837,28 @@ export function registerAllHandlers(): void {
     }
   });
 
+  // --- Mark Leads as Processed (before scan starts) ---
+  ipcMain.handle(IPC_CHANNELS.SHEETS_MARK_PROCESSED, async (_event, {
+    spreadsheetId,
+    sheetName,
+    rowNumbers,
+  }: {
+    spreadsheetId: string;
+    sheetName: string;
+    rowNumbers: number[];
+  }) => {
+    try {
+      console.log(`[IPC] SHEETS_MARK_PROCESSED - Marking ${rowNumbers.length} rows in "${sheetName}"`);
+      const authClient = await registry.googleAuth.getAuthenticatedClient();
+      const importer = new SheetsLeadImporter(authClient);
+      const result = await importer.markRowsAsProcessed(spreadsheetId, rowNumbers, sheetName);
+      return { success: result.success, markedCount: result.markedCount, errors: result.errors };
+    } catch (error) {
+      console.error('[IPC] SHEETS_MARK_PROCESSED error:', error);
+      return { success: false, error: String(error), markedCount: 0 };
+    }
+  });
+
   // --- Google Sheets Lead Import ---
   ipcMain.handle(IPC_CHANNELS.SHEETS_IMPORT_LEADS, async (_event, url: string) => {
     try {
@@ -914,12 +919,14 @@ export function registerAllHandlers(): void {
         sourceSheetName: sheetTabName,  // Use actual tab name for API calls
       }));
 
-      // 4. Validate leads through existing CSV validation pipeline
-      const csvParser = registry.csvParser;
-      const { valid: validLeads, invalid: invalidLeads } = csvParser.validateLeads(leadsWithSource);
+      // 4. CLEANUP: Validate and remove invalid leads (FIRST step after import)
+      const validator = registry.validator;
+      const cleanupResult = validator.cleanLeads(leadsWithSource);
+      const invalidLeads = cleanupResult.removedLeads;
 
       // 5. Filter duplicate emails within the imported data
-      const { unique: uniqueLeads, duplicates: duplicateEmails } = csvParser.filterDuplicateEmails(validLeads);
+      const csvParser = registry.csvParser;
+      const { unique: uniqueLeads, duplicates: duplicateEmails } = csvParser.filterDuplicateEmails(cleanupResult.cleanedLeads);
 
       // 6. Check for already-scanned leads via the output sheet (if configured)
       let readyLeads = uniqueLeads;

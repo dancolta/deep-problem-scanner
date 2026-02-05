@@ -6,6 +6,7 @@ import { DriveService } from '../src/services/google/drive';
 import { EmailGenerator } from '../src/services/email/email-generator';
 import { LeadPipeline } from '../src/services/csv/lead-pipeline';
 import { CsvParser } from '../src/services/csv/csv-parser';
+import { LeadValidator } from '../src/services/validation/lead-validator';
 import { GmailService } from '../src/services/google/gmail';
 import { EmailScheduler } from '../src/services/scheduler/email-scheduler';
 import { PageSpeedService } from '../src/services/pagespeed/pagespeed-service';
@@ -19,6 +20,7 @@ export class ServiceRegistry {
   private _googleAuth: GoogleAuthService | null = null;
   private _emailGenerator: EmailGenerator | null = null;
   private _csvParser: CsvParser | null = null;
+  private _validator: LeadValidator | null = null;
   private _scheduler: EmailScheduler | null = null;
   private _pageSpeed: PageSpeedService | null = null;
 
@@ -71,6 +73,13 @@ export class ServiceRegistry {
       this._csvParser = new CsvParser();
     }
     return this._csvParser;
+  }
+
+  get validator(): LeadValidator {
+    if (!this._validator) {
+      this._validator = new LeadValidator();
+    }
+    return this._validator;
   }
 
   async getSheets(): Promise<SheetsService> {

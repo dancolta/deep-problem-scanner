@@ -10,7 +10,7 @@ type ImportSource = 'quick' | 'sheets' | 'csv';
 interface PipelineResult {
   leads: Lead[];
   totalParsed: number;
-  invalidLeads: { lead: Lead; reason: string }[];
+  invalidLeads: { lead: Lead; reasons: string[] }[];
   duplicateEmails: Lead[];
   alreadyScanned: Lead[];
   alreadyProcessed: number;  // Leads with Processed checkbox marked
@@ -58,6 +58,10 @@ export default function UploadPage() {
   const [sheetsError, setSheetsError] = useState<string | null>(null);
   const [sheetName, setSheetName] = useState<string | null>(null);
 
+  // Validation review state - tracks whether user has cleared flagged leads
+  const [listCleared, setListCleared] = useState(false);
+  const [showFlaggedLeads, setShowFlaggedLeads] = useState(false);
+
   // Helper for URL validation
   const sheetsId = useMemo(() => {
     const match = sheetsUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/);
@@ -100,6 +104,8 @@ export default function UploadPage() {
     setParseError(null);
     setParseResult(null);
     setIsLoading(true);
+    setListCleared(false);
+    setShowFlaggedLeads(false);
 
     try {
       const content = await selectedFile.text();
@@ -175,6 +181,9 @@ export default function UploadPage() {
     setSheetsStatus('idle');
     setSheetsError(null);
     setSheetName(null);
+    // Reset validation review state
+    setListCleared(false);
+    setShowFlaggedLeads(false);
   }, []);
 
   // Tab switch handler
@@ -204,6 +213,8 @@ export default function UploadPage() {
     setSheetsError(null);
     setParseResult(null);
     setParseError(null);
+    setListCleared(false);
+    setShowFlaggedLeads(false);
 
     try {
       const response = await window.electronAPI.invoke(
@@ -283,6 +294,16 @@ export default function UploadPage() {
     }
   }, [quickScanUrl, quickScanName, quickScanContactName, quickScanContactEmail, isValidUrl, normalizeUrl, extractDomain, startScan, navigate]);
 
+  // Handler to clear flagged leads (user acknowledges and removes invalid entries)
+  const handleClearFlaggedLeads = useCallback(() => {
+    setListCleared(true);
+    setShowFlaggedLeads(false);
+  }, []);
+
+  // Check if there are flagged leads that need to be cleared
+  const hasFlaggedLeads = Boolean(parseResult && parseResult.invalidLeads.length > 0);
+  const needsClearance = hasFlaggedLeads && !listCleared;
+
   const getLeadsToScan = useCallback((): Lead[] => {
     if (!parseResult) return [];
     if (scanAll) return parseResult.leads;
@@ -308,6 +329,35 @@ export default function UploadPage() {
       const sheetUrl = settingsResponse?.settings?.googleSheetUrl || '';
       const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
       const spreadsheetId = match ? match[1] : '';
+
+      // Mark all leads as processed in source sheet BEFORE scanning starts
+      // This ensures they won't be re-imported even if scan fails
+      const leadsWithSource = leads.filter(
+        (l: Lead) => l.sourceSpreadsheetId && l.sourceRowNumber && l.sourceSheetName
+      );
+
+      if (leadsWithSource.length > 0) {
+        const firstLead = leadsWithSource[0] as Lead;
+        const rowNumbers = leadsWithSource.map((l: Lead) => l.sourceRowNumber as number);
+
+        console.log(`[UploadPage] Marking ${rowNumbers.length} leads as processed before scan`);
+
+        const markResult = await window.electronAPI.invoke(
+          IPC_CHANNELS.SHEETS_MARK_PROCESSED,
+          {
+            spreadsheetId: firstLead.sourceSpreadsheetId,
+            sheetName: firstLead.sourceSheetName,
+            rowNumbers,
+          }
+        ) as { success: boolean; markedCount?: number; error?: string };
+
+        if (!markResult.success) {
+          console.error('[UploadPage] Failed to mark leads as processed:', markResult.error);
+          // Continue with scan anyway - marking is best-effort
+        } else {
+          console.log(`[UploadPage] Successfully marked ${markResult.markedCount} leads as processed`);
+        }
+      }
 
       // Fire-and-forget via context — navigates immediately
       startScan(leads, spreadsheetId);
@@ -505,6 +555,80 @@ export default function UploadPage() {
         </div>
       )}
 
+      {/* Flagged Leads Section - Shows when there are invalid leads */}
+      {parseResult && parseResult.invalidLeads.length > 0 && (
+        <div className={`flagged-leads-section ${listCleared ? 'flagged-leads-section--cleared' : ''}`}>
+          <div className="flagged-leads-header">
+            <div className="flagged-leads-title">
+              <span className="flagged-icon">{listCleared ? '\u2713' : '\u26A0'}</span>
+              <span>
+                {listCleared
+                  ? `${parseResult.invalidLeads.length} invalid leads removed`
+                  : `${parseResult.invalidLeads.length} leads flagged for removal`
+                }
+              </span>
+            </div>
+            <div className="flagged-leads-actions">
+              {!listCleared && (
+                <>
+                  <button
+                    className="btn btn--text"
+                    onClick={() => setShowFlaggedLeads(!showFlaggedLeads)}
+                  >
+                    {showFlaggedLeads ? 'Hide Details' : 'View Details'}
+                  </button>
+                  <button
+                    className="btn btn--warning"
+                    onClick={handleClearFlaggedLeads}
+                  >
+                    Clear List
+                  </button>
+                </>
+              )}
+              {listCleared && (
+                <button
+                  className="btn btn--text"
+                  onClick={() => setShowFlaggedLeads(!showFlaggedLeads)}
+                >
+                  {showFlaggedLeads ? 'Hide' : 'View Removed'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {showFlaggedLeads && (
+            <div className="flagged-leads-list">
+              <table className="flagged-table">
+                <thead>
+                  <tr>
+                    <th>Company</th>
+                    <th>Website</th>
+                    <th>Email</th>
+                    <th>Issue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parseResult.invalidLeads.map((item, i) => (
+                    <tr key={i}>
+                      <td>{item.lead.company_name || <span className="text-muted">empty</span>}</td>
+                      <td>{item.lead.website_url || <span className="text-muted">empty</span>}</td>
+                      <td>{item.lead.contact_email || <span className="text-muted">empty</span>}</td>
+                      <td className="text-red">{item.reasons.join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {!listCleared && (
+            <p className="flagged-leads-hint">
+              These leads have missing or invalid data and won't be processed. Click "Clear List" to remove them and continue.
+            </p>
+          )}
+        </div>
+      )}
+
       {parseResult && parseResult.leads.length > 0 && (
         <div className="preview-table-container">
           <table className="preview-table">
@@ -624,9 +748,13 @@ export default function UploadPage() {
         <button
           className="btn btn--primary btn--large"
           onClick={handleStartScan}
-          disabled={!parseResult || getLeadsToScan().length === 0}
+          disabled={!parseResult || getLeadsToScan().length === 0 || needsClearance}
+          title={needsClearance ? 'Clear flagged leads before scanning' : undefined}
         >
-          Start Scan ({getLeadsToScan().length} leads)
+          {needsClearance
+            ? `Clear List First (${parseResult?.invalidLeads.length} flagged)`
+            : `Start Scan (${getLeadsToScan().length} leads)`
+          }
         </button>
       </div>
     </div>

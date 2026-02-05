@@ -212,30 +212,44 @@ export class SheetsLeadImporter {
   }
 
   /**
-   * Mark a lead as processed by setting the "Processed" checkbox to TRUE.
-   * This prevents the lead from being imported again on subsequent uploads.
+   * Mark multiple leads as processed in a single batch operation.
+   * Sets the "Processed" checkbox (Column A) to TRUE for all specified rows.
+   * This should be called BEFORE scanning starts to prevent re-importing.
    */
-  async markAsProcessed(
+  async markRowsAsProcessed(
     spreadsheetId: string,
-    rowNumber: number,
+    rowNumbers: number[],
     sheetName?: string
-  ): Promise<void> {
-    // Get sheet name if not provided
+  ): Promise<{ success: boolean; markedCount: number; errors: string[] }> {
+    if (rowNumbers.length === 0) {
+      return { success: true, markedCount: 0, errors: [] };
+    }
+
     const targetSheetName = sheetName || await this.getFirstSheetName(spreadsheetId);
+    console.log(`[SheetsImporter] Marking ${rowNumbers.length} rows as processed in "${targetSheetName}"`);
 
-    console.log(`[SheetsImporter] Marking row ${rowNumber} as processed in "${targetSheetName}"`);
-
-    // Write TRUE to Column A of the specified row (Processed checkbox column)
-    await this.sheets.spreadsheets.values.update({
-      spreadsheetId,
+    // Build batch update data - each row gets TRUE in column A
+    const data = rowNumbers.map(rowNumber => ({
       range: `'${targetSheetName}'!A${rowNumber}`,
-      valueInputOption: 'USER_ENTERED',
-      requestBody: {
-        values: [[true]],
-      },
-    });
+      values: [[true]],
+    }));
 
-    console.log(`[SheetsImporter] Successfully marked row ${rowNumber} as processed`);
+    try {
+      await this.sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data,
+        },
+      });
+
+      console.log(`[SheetsImporter] Successfully marked ${rowNumbers.length} rows as processed`);
+      return { success: true, markedCount: rowNumbers.length, errors: [] };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`[SheetsImporter] Failed to mark rows as processed:`, errorMsg);
+      return { success: false, markedCount: 0, errors: [errorMsg] };
+    }
   }
 
   /**

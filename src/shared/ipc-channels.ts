@@ -24,6 +24,7 @@ export const IPC_CHANNELS = {
   SHEETS_READ: 'sheets:read',
   SHEETS_CHECK_DUPLICATES: 'sheets:check-duplicates',
   SHEETS_IMPORT_LEADS: 'sheets:import-leads',
+  SHEETS_MARK_PROCESSED: 'sheets:mark-processed',
 
   // Google Drive
   DRIVE_UPLOAD: 'drive:upload',
