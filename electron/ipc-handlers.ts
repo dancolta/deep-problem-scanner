@@ -65,21 +65,105 @@ function getRandomInterval(min: number, max: number): number {
 /**
  * Validates if a given datetime is in the future for a specific timezone.
  * @param dateStr - Date string in YYYY-MM-DD format
- * @param hour - Hour in 24-hour format (0-23)
+ * @param timeMinutes - Time in minutes from midnight (0-1439)
  * @param targetTimezone - IANA timezone string (e.g., 'America/New_York')
  * @returns true if the selected time is in the future for that timezone
  */
-function isValidFutureTimeInTimezone(dateStr: string, hour: number, targetTimezone: string): boolean {
+/**
+ * Calculate the next available business hours time slot in a timezone.
+ * Business hours: 9am-6pm. If current time is past 6pm, schedules for next day 9am.
+ * @param timezone - IANA timezone string
+ * @param offsetIndex - How many slots into the queue (for spacing emails)
+ * @param intervalMinutes - Minutes between emails
+ * @returns Timestamp in milliseconds (UTC)
+ */
+function getNextBusinessHoursTime(timezone: string, offsetIndex: number = 0, intervalMinutes: number = 15): number {
+  const now = new Date();
+
+  // Get current time in target timezone
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  });
+
+  const parts = formatter.formatToParts(now);
+  const getPart = (type: string) => parts.find(p => p.type === type)?.value || '0';
+
+  const currentHour = parseInt(getPart('hour'));
+  const currentMinute = parseInt(getPart('minute'));
+  const currentYear = parseInt(getPart('year'));
+  const currentMonth = parseInt(getPart('month'));
+  const currentDay = parseInt(getPart('day'));
+
+  // Business hours: 9am (540 min) to 6pm (1080 min)
+  const businessStartMinutes = 9 * 60;  // 9:00 AM
+  const businessEndMinutes = 18 * 60;   // 6:00 PM
+  const currentMinutesOfDay = currentHour * 60 + currentMinute;
+
+  let targetDate: string;
+  let targetMinutes: number;
+
+  if (currentMinutesOfDay >= businessEndMinutes) {
+    // Past 6pm - schedule for next day 9am
+    const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const tomorrowParts = formatter.formatToParts(tomorrow);
+    const getPartT = (type: string) => tomorrowParts.find(p => p.type === type)?.value || '0';
+    targetDate = `${getPartT('year')}-${getPartT('month')}-${getPartT('day')}`;
+    targetMinutes = businessStartMinutes;
+  } else if (currentMinutesOfDay < businessStartMinutes) {
+    // Before 9am - schedule for 9am today
+    targetDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    targetMinutes = businessStartMinutes;
+  } else {
+    // Within business hours - schedule for now + small buffer
+    targetDate = `${currentYear}-${String(currentMonth).padStart(2, '0')}-${String(currentDay).padStart(2, '0')}`;
+    targetMinutes = currentMinutesOfDay + 5; // 5 min buffer
+  }
+
+  // Add offset for queue position
+  targetMinutes += offsetIndex * intervalMinutes;
+
+  // If offset pushes past 6pm, roll to next day
+  while (targetMinutes >= businessEndMinutes) {
+    targetMinutes = businessStartMinutes + (targetMinutes - businessEndMinutes);
+    const nextDay = new Date(`${targetDate}T12:00:00`);
+    nextDay.setDate(nextDay.getDate() + 1);
+    targetDate = nextDay.toISOString().split('T')[0];
+  }
+
+  // Convert target time in timezone to UTC
+  const targetHour = Math.floor(targetMinutes / 60);
+  const targetMinute = targetMinutes % 60;
+  const dateTimeStr = `${targetDate}T${String(targetHour).padStart(2, '0')}:${String(targetMinute).padStart(2, '0')}:00`;
+
+  // Calculate offset between local and target timezone
+  const localDate = new Date(dateTimeStr);
+  const localFormatter = new Intl.DateTimeFormat('en-US', {
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+    hour12: false,
+  });
+
+  const refTime = new Date();
+  const targetRefParts = formatter.formatToParts(refTime);
+  const localRefParts = localFormatter.formatToParts(refTime);
+
+  const getMinutes = (p: Intl.DateTimeFormatPart[]) => {
+    const h = parseInt(p.find(x => x.type === 'hour')?.value || '0');
+    const m = parseInt(p.find(x => x.type === 'minute')?.value || '0');
+    return h * 60 + m;
+  };
+
+  const offsetMins = getMinutes(localRefParts) - getMinutes(targetRefParts);
+  return localDate.getTime() + (offsetMins * 60_000);
+}
+
+function isValidFutureTimeInTimezone(dateStr: string, timeMinutes: number, targetTimezone: string): boolean {
   // Get current time in target timezone
   const now = new Date();
-  const nowInTimezone = new Date(now.toLocaleString('en-US', { timeZone: targetTimezone }));
 
-  // Parse the selected datetime in the target timezone
-  // Create a date object for the selected date/hour in the target timezone
-  const selectedDatetime = new Date(`${dateStr}T${String(hour).padStart(2, '0')}:00:00`);
-
-  // To properly compare, we need to interpret selectedDatetime as being in targetTimezone
-  // Convert the selected time to UTC by finding the offset
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: targetTimezone,
     year: 'numeric',
@@ -100,6 +184,7 @@ function isValidFutureTimeInTimezone(dateStr: string, hour: number, targetTimezo
   const currentDay = parseInt(getPart('day'));
   const currentHour = parseInt(getPart('hour'));
   const currentMinute = parseInt(getPart('minute'));
+  const currentTotalMinutes = currentHour * 60 + currentMinute;
 
   // Parse selected date
   const [selectedYear, selectedMonth, selectedDay] = dateStr.split('-').map(Number);
@@ -114,8 +199,8 @@ function isValidFutureTimeInTimezone(dateStr: string, hour: number, targetTimezo
   if (selectedDay > currentDay) return true;
   if (selectedDay < currentDay) return false;
 
-  // Same day - compare hours (allow some buffer for the current minute)
-  return hour > currentHour || (hour === currentHour && currentMinute < 5);
+  // Same day - compare time in minutes (allow some buffer)
+  return timeMinutes > currentTotalMinutes + 2;
 }
 
 export function registerAllHandlers(): void {
@@ -927,11 +1012,11 @@ export function registerAllHandlers(): void {
       const gmail = await registry.getAuthenticatedGmail();
       const rows = await sheets.readRows(spreadsheetId);
 
-      // Filter for draft or approved emails WITH actual lead data
-      // This prevents scheduling empty/orphan rows that somehow have draft status
+      // Filter for draft, approved, OR scheduled emails WITH actual lead data
+      // This allows restoring scheduled emails after app restart
       console.log(`[IPC] Total rows from sheet: ${rows.length}`);
       const drafts = rows.filter((r: any, idx: number) => {
-        const hasValidStatus = r.email_status === 'draft' || r.email_status === 'approved';
+        const hasValidStatus = r.email_status === 'draft' || r.email_status === 'approved' || r.email_status === 'scheduled';
         const hasCompanyName = Boolean(r.company_name?.trim());
         const hasContactEmail = Boolean(r.contact_email?.trim());
         const hasEmailContent = Boolean(r.email_subject?.trim() || r.email_body?.trim());
@@ -941,16 +1026,17 @@ export function registerAllHandlers(): void {
         }
         return isValid;
       });
-      console.log(`[IPC] Valid drafts after filter: ${drafts.length}`);
+      console.log(`[IPC] Valid emails after filter: ${drafts.length} (including scheduled)`);
 
       if (drafts.length === 0) {
         return { success: false, error: 'No draft emails to schedule' };
       }
 
-      // Get scheduling parameters with defaults
+      // Get scheduling parameters with defaults (time in minutes from midnight)
       const startDate = config?.scheduleStartDate || new Date().toISOString().split('T')[0];
-      const startHour = config?.scheduleStartHour ?? settings.scheduleStartHour ?? 9;
-      const endHour = config?.scheduleEndHour ?? settings.scheduleEndHour ?? 17;
+      // Support both new (minutes) and old (hours) format for backwards compatibility
+      const startTime = config?.scheduleStartTime ?? (config?.scheduleStartHour ? config.scheduleStartHour * 60 : null) ?? (settings as any).scheduleStartTime ?? (settings.scheduleStartHour ? settings.scheduleStartHour * 60 : 9 * 60);
+      const endTime = config?.scheduleEndTime ?? (config?.scheduleEndHour ? config.scheduleEndHour * 60 : null) ?? (settings as any).scheduleEndTime ?? (settings.scheduleEndHour ? settings.scheduleEndHour * 60 : 17 * 60);
       const timezone = settings.timezone || 'America/New_York';
 
       // New random interval parameters (replacing emailsPerHour and distributionPattern)
@@ -961,10 +1047,12 @@ export function registerAllHandlers(): void {
       const selectedSenderEmail = config?.selectedSenderEmail ?? settings.selectedSenderEmail;
 
       // Validate that start time is in the future for the lead's timezone
-      if (!isValidFutureTimeInTimezone(startDate, startHour, timezone)) {
+      const startHourForDisplay = Math.floor(startTime / 60);
+      const startMinuteForDisplay = startTime % 60;
+      if (!isValidFutureTimeInTimezone(startDate, startTime, timezone)) {
         return {
           success: false,
-          error: `The scheduled start time (${startDate} at ${startHour}:00) is in the past for timezone ${timezone}. Please select a future date and time.`,
+          error: `The scheduled start time (${startDate} at ${startHourForDisplay}:${String(startMinuteForDisplay).padStart(2, '0')}) is in the past for timezone ${timezone}. Please select a future date and time.`,
         };
       }
 
@@ -972,31 +1060,102 @@ export function registerAllHandlers(): void {
         intervalMinutes: minIntervalMinutes, // Base interval for scheduler
         timezone,
         maxRetries: 3,
-        startHour,
-        endHour,
+        startHour: startHourForDisplay,
+        endHour: Math.floor(endTime / 60),
       };
 
       const scheduler = registry.getScheduler(schedulerConfig);
 
-      // Calculate start time
-      const startDateTime = new Date(`${startDate}T${String(startHour).padStart(2, '0')}:00:00`);
-      const startTime = startDateTime.getTime();
+      // Calculate start time in milliseconds, converting from lead's timezone to UTC
+      const startHour = Math.floor(startTime / 60);
+      const startMinute = startTime % 60;
+
+      // Create a datetime string and convert from lead's timezone to local time
+      // This ensures "8 PM Bucharest" sends at "6 PM London" if user is in London
+      const dateTimeStr = `${startDate}T${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}:00`;
+
+      // Calculate timezone offset: get the same instant in both timezones and find difference
+      const localDate = new Date(dateTimeStr); // Interpreted as local time
+      const utcTime = localDate.getTime();
+
+      // Get what the local time would be when it's dateTimeStr in the target timezone
+      // We do this by finding the offset between local and target timezone
+      const formatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      });
+      const localFormatter = new Intl.DateTimeFormat('en-US', {
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit',
+        hour12: false,
+      });
+
+      // Use a reference time to calculate offset between timezones
+      const refTime = new Date();
+      const targetParts = formatter.formatToParts(refTime);
+      const localParts = localFormatter.formatToParts(refTime);
+
+      const getMinutes = (parts: Intl.DateTimeFormatPart[]) => {
+        const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+        const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+        return h * 60 + m;
+      };
+
+      const targetMinutes = getMinutes(targetParts);
+      const localMinutes = getMinutes(localParts);
+      const offsetMinutes = localMinutes - targetMinutes; // How many minutes ahead local is from target
+
+      // Adjust: if target timezone is ahead, we need to send earlier in local time
+      const startTimeMs = utcTime + (offsetMinutes * 60_000);
+
+      console.log(`[IPC] Timezone conversion: ${dateTimeStr} in ${timezone} = ${new Date(startTimeMs).toISOString()} UTC (offset: ${offsetMinutes}min)`);
 
       // Convert drafts to EmailDraft format and schedule with random intervals
-      // First email: sent at scheduled start time
-      // Each subsequent email: previous send time + random interval
-      let currentScheduledTime = startTime;
+      // Handle both new drafts and previously scheduled emails (restore on app restart)
+      let currentScheduledTime = startTimeMs;
+      let rescheduledCount = 0;
 
       console.log(`[IPC] Using interval range: ${minIntervalMinutes}-${maxIntervalMinutes} minutes`);
       const emailDrafts = drafts.map((row: any, index: number) => {
-        // First email goes at start time, subsequent emails get random interval
-        let randomInterval = 0;
-        if (index > 0) {
-          randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
-          currentScheduledTime += randomInterval * 60_000; // Convert minutes to milliseconds
+        let scheduledTimeMs: number;
+        let isRescheduled = false;
+
+        // Check if this was previously scheduled
+        if (row.email_status === 'scheduled' && row.scheduled_time) {
+          // Try to parse the existing scheduled time
+          // Format is like "2024-02-05|18:00:00 (Bucharest)" - extract the datetime part
+          const timeMatch = row.scheduled_time.match(/^(\d{4}-\d{2}-\d{2})\|(\d{2}:\d{2}:\d{2})/);
+          if (timeMatch) {
+            const existingDateTime = new Date(`${timeMatch[1]}T${timeMatch[2]}`);
+            const existingTimeMs = existingDateTime.getTime();
+
+            if (existingTimeMs > Date.now()) {
+              // Scheduled time is still in the future - use it
+              scheduledTimeMs = existingTimeMs;
+              console.log(`[IPC] Email ${index}: ${row.company_name} -> RESTORED existing schedule at ${row.scheduled_time}`);
+            } else {
+              // Scheduled time has passed - reschedule for next business hours
+              scheduledTimeMs = getNextBusinessHoursTime(timezone, rescheduledCount, getRandomInterval(minIntervalMinutes, maxIntervalMinutes));
+              rescheduledCount++;
+              isRescheduled = true;
+              console.log(`[IPC] Email ${index}: ${row.company_name} -> RESCHEDULED (was ${row.scheduled_time}, now ${new Date(scheduledTimeMs).toISOString()})`);
+            }
+          } else {
+            // Couldn't parse existing time - treat as new
+            scheduledTimeMs = currentScheduledTime;
+          }
+        } else {
+          // New draft - use normal scheduling
+          if (index > 0) {
+            const randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
+            currentScheduledTime += randomInterval * 60_000;
+          }
+          scheduledTimeMs = currentScheduledTime;
         }
 
-        const scheduledTime = new Date(currentScheduledTime);
+        const scheduledTime = new Date(scheduledTimeMs);
 
         // Format scheduled time in lead's timezone for readability
         const formattedTime = scheduledTime.toLocaleString('en-CA', {
@@ -1012,11 +1171,13 @@ export function registerAllHandlers(): void {
         const tzShort = timezone.split('/').pop()?.replace(/_/g, ' ') || timezone;
         const readableScheduledTime = `${formattedTime} (${tzShort})`;
 
-        console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${readableScheduledTime} (interval: +${randomInterval}min)`);
+        if (row.email_status !== 'scheduled' || isRescheduled) {
+          console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${readableScheduledTime}`);
+        }
 
-        // Update sheet row with scheduled status
+        // Update sheet row with scheduled status (only if changed)
         const rowIndex = rows.indexOf(row);
-        if (rowIndex >= 0) {
+        if (rowIndex >= 0 && (row.email_status !== 'scheduled' || isRescheduled)) {
           sheets.updateRowStatus(spreadsheetId, rowIndex, {
             email_status: 'scheduled',
             scheduled_time: readableScheduledTime,
@@ -1035,19 +1196,35 @@ export function registerAllHandlers(): void {
             contact_email: row.contact_email,
           },
           status: 'scheduled' as const,
-          scheduledAt: scheduledTime.getTime(), // Include scheduled time for each email
+          scheduledAt: scheduledTimeMs, // Include scheduled time for each email
           fromEmail: selectedSenderEmail, // Sender alias
+          existingDraftId: row.draft_id, // Use existing draft from scan
         };
       });
 
-      scheduler.addToQueue(emailDrafts as any, startTime);
+      if (rescheduledCount > 0) {
+        console.log(`[IPC] Rescheduled ${rescheduledCount} missed emails to next business hours (9am-6pm ${timezone})`);
+      }
 
-      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${startDateTime.toISOString()}, interval: ${minIntervalMinutes}-${maxIntervalMinutes} min)`);
+      scheduler.addToQueue(emailDrafts as any, startTimeMs);
+
+      console.log(`[IPC] Loaded ${emailDrafts.length} emails into scheduler queue (start: ${new Date(startTimeMs).toISOString()}, interval: ${minIntervalMinutes}-${maxIntervalMinutes} min)`);
 
       // Start the scheduler with send function
       const sendFn = async (draft: any) => {
-        const result = await gmail.createDraft(draft);
-        const sendResult = await gmail.sendDraft(result.draftId);
+        let draftId: string;
+
+        // Use existing draft if available, otherwise create new one
+        if (draft.existingDraftId) {
+          draftId = draft.existingDraftId;
+          console.log(`[IPC] Using existing draft ${draftId} for ${draft.to}`);
+        } else {
+          const result = await gmail.createDraft(draft);
+          draftId = result.draftId;
+          console.log(`[IPC] Created new draft ${draftId} for ${draft.to}`);
+        }
+
+        const sendResult = await gmail.sendDraft(draftId);
 
         // Update sheet row to 'sent'
         const rowIndex = rows.findIndex((r: any) => r.contact_email === draft.to);
@@ -1058,7 +1235,7 @@ export function registerAllHandlers(): void {
           } as any);
         }
 
-        return { draftId: result.draftId, messageId: sendResult.messageId };
+        return { draftId, messageId: sendResult.messageId };
       };
 
       scheduler.start(sendFn as any);

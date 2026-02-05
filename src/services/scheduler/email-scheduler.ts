@@ -23,21 +23,24 @@ export class EmailScheduler {
 
   start(sendFn: (draft: EmailDraft) => Promise<{ draftId: string; messageId: string }>): void {
     this.running = true;
-    this.timer = setInterval(() => {
+
+    const checkAndProcess = () => {
       if (!this.running) return;
-      const hour = new Date().getHours();
-      const startH = this.config.startHour ?? 9;
-      const endH = this.config.endHour ?? 17;
-      if (hour < startH || hour >= endH) {
-        return; // Outside send window
-      }
+      // Check every pending email and process if its scheduled time has passed
+      // The send window is already baked into the scheduledTime during addToQueue
       this.processNext(sendFn);
-    }, this.config.intervalMinutes * 60_000);
+    };
+
+    // Process immediately on start (don't wait for first interval)
+    checkAndProcess();
+
+    // Then check periodically (every minute to catch scheduled times accurately)
+    this.timer = setInterval(checkAndProcess, 60_000); // Check every minute
 
     this.emit({
       type: 'started',
       timestamp: new Date().toISOString(),
-      detail: `Scheduler started with ${this.config.intervalMinutes}min interval (send window ${this.config.startHour ?? 9}:00–${this.config.endHour ?? 17}:00)`,
+      detail: `Scheduler started, checking every minute (${this.queue.filter(e => e.status === 'pending').length} emails pending)`,
     });
   }
 

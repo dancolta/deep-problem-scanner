@@ -11,10 +11,18 @@ interface LogEntry {
 
 type SchedulerState = 'idle' | 'running' | 'stopped';
 
-const HOUR_OPTIONS = Array.from({ length: 24 }, (_, i) => ({
-  value: i,
-  label: `${i === 0 ? '12' : i > 12 ? i - 12 : i}:00 ${i < 12 ? 'AM' : 'PM'}`,
-}));
+// Generate time options at 15-minute intervals
+const TIME_OPTIONS = Array.from({ length: 96 }, (_, i) => {
+  const totalMinutes = i * 15;
+  const hour = Math.floor(totalMinutes / 60);
+  const minute = totalMinutes % 60;
+  const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  return {
+    value: totalMinutes, // Store as minutes from midnight
+    label: `${displayHour}:${String(minute).padStart(2, '0')} ${ampm}`,
+  };
+});
 
 /**
  * Validates that a schedule row has the required data for email sending.
@@ -81,8 +89,8 @@ export default function SchedulePage() {
   // Schedule config
   const todayStr = new Date().toISOString().split('T')[0];
   const [startDate, setStartDate] = useState(todayStr);
-  const [startHour, setStartHour] = useState(9);
-  const [endHour, setEndHour] = useState(17);
+  const [startTime, setStartTime] = useState(9 * 60);  // 9:00 AM in minutes
+  const [endTime, setEndTime] = useState(17 * 60);     // 5:00 PM in minutes
   const [minInterval, setMinInterval] = useState(10);
   const [maxInterval, setMaxInterval] = useState(20);
   const [timezone, setTimezone] = useState(Intl.DateTimeFormat().resolvedOptions().timeZone);
@@ -110,8 +118,17 @@ export default function SchedulePage() {
       const s: AppSettings | undefined = settingsResp?.settings ?? settingsResp;
       if (s?.googleSheetUrl) {
         setSettings(s);
-        if (s.scheduleStartHour !== undefined) setStartHour(s.scheduleStartHour);
-        if (s.scheduleEndHour !== undefined) setEndHour(s.scheduleEndHour);
+        // Load time settings - convert from hours to minutes if needed for backward compatibility
+        if ((s as any).scheduleStartTime !== undefined) {
+          setStartTime((s as any).scheduleStartTime);
+        } else if (s.scheduleStartHour !== undefined) {
+          setStartTime(s.scheduleStartHour * 60);
+        }
+        if ((s as any).scheduleEndTime !== undefined) {
+          setEndTime((s as any).scheduleEndTime);
+        } else if (s.scheduleEndHour !== undefined) {
+          setEndTime(s.scheduleEndHour * 60);
+        }
         if ((s as any).minIntervalMinutes !== undefined) setMinInterval((s as any).minIntervalMinutes);
         if ((s as any).maxIntervalMinutes !== undefined) setMaxInterval((s as any).maxIntervalMinutes);
         if (s.timezone) setTimezone(s.timezone);
@@ -173,8 +190,8 @@ export default function SchedulePage() {
       const updated = {
         ...current,
         scheduleStartDate: startDate,
-        scheduleStartHour: startHour,
-        scheduleEndHour: endHour,
+        scheduleStartTime: startTime,
+        scheduleEndTime: endTime,
         minIntervalMinutes: minInterval,
         maxIntervalMinutes: maxInterval,
         timezone,
@@ -186,17 +203,19 @@ export default function SchedulePage() {
   };
 
   const handleStart = async () => {
-    // Validate start date+hour is not in the past for the target timezone
+    // Validate start date+time is not in the past for the target timezone
     const targetNow = new Date(new Date().toLocaleString('en-US', { timeZone: timezone }));
-    const selectedStartStr = `${startDate}T${String(startHour).padStart(2, '0')}:00:00`;
+    const startHour = Math.floor(startTime / 60);
+    const startMinute = startTime % 60;
+    const selectedStartStr = `${startDate}T${String(startHour).padStart(2, '0')}:${String(startMinute).padStart(2, '0')}:00`;
     const selectedStart = new Date(selectedStartStr);
     if (selectedStart < targetNow) {
       const tzLabel = timezone.replace(/_/g, ' ');
       setConfigError(`Start time cannot be in the past for the selected timezone (${tzLabel}).`);
       return;
     }
-    if (endHour <= startHour) {
-      setConfigError('End hour must be after start hour.');
+    if (endTime <= startTime) {
+      setConfigError('End time must be after start time.');
       return;
     }
     if (minInterval > maxInterval) {
@@ -207,8 +226,8 @@ export default function SchedulePage() {
     await saveScheduleConfig();
     await window.electronAPI.invoke(IPC_CHANNELS.SCHEDULER_START, {
       scheduleStartDate: startDate,
-      scheduleStartHour: startHour,
-      scheduleEndHour: endHour,
+      scheduleStartTime: startTime,
+      scheduleEndTime: endTime,
       minIntervalMinutes: minInterval,
       maxIntervalMinutes: maxInterval,
     });
@@ -255,24 +274,24 @@ export default function SchedulePage() {
           <div className="config-field">
             <label>Send Window Start</label>
             <select
-              value={startHour}
-              onChange={e => setStartHour(Number(e.target.value))}
+              value={startTime}
+              onChange={e => setStartTime(Number(e.target.value))}
               disabled={schedulerStatus === 'running'}
             >
-              {HOUR_OPTIONS.map(h => (
-                <option key={h.value} value={h.value}>{h.label}</option>
+              {TIME_OPTIONS.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
           </div>
           <div className="config-field">
             <label>Send Window End</label>
             <select
-              value={endHour}
-              onChange={e => setEndHour(Number(e.target.value))}
+              value={endTime}
+              onChange={e => setEndTime(Number(e.target.value))}
               disabled={schedulerStatus === 'running'}
             >
-              {HOUR_OPTIONS.map(h => (
-                <option key={h.value} value={h.value}>{h.label}</option>
+              {TIME_OPTIONS.map(t => (
+                <option key={t.value} value={t.value}>{t.label}</option>
               ))}
             </select>
           </div>
