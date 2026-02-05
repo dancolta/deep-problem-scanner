@@ -38,7 +38,8 @@ export interface SheetImportResult {
     contact_email: string;
     sourceRowNumber: number;  // 1-based row number for marking as processed
   }>;
-  sheetName: string;
+  sheetName: string;         // Spreadsheet document title (for display)
+  sheetTabName: string;      // Actual sheet/tab name (for API calls like marking processed)
   totalRows: number;
   headers: string[];
   alreadyProcessed: number;  // Count of rows with Processed=TRUE
@@ -159,6 +160,7 @@ export class SheetsLeadImporter {
     return {
       leads,
       sheetName: spreadsheetName,
+      sheetTabName: sheetName,  // Actual tab name for API calls
       totalRows: actualDataRows,
       headers,
       alreadyProcessed,

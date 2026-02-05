@@ -872,6 +872,7 @@ export function registerAllHandlers(): void {
       const {
         leads,
         sheetName,
+        sheetTabName,  // Actual tab name for marking as processed
         totalRows,
         headers,
         alreadyProcessed,
@@ -879,6 +880,8 @@ export function registerAllHandlers(): void {
       } = await importer.importLeads(spreadsheetId, gid);
 
       // Log for debugging
+      console.log('[IPC] SHEETS_IMPORT_LEADS - Spreadsheet name:', sheetName);
+      console.log('[IPC] SHEETS_IMPORT_LEADS - Sheet tab name:', sheetTabName);
       console.log('[IPC] SHEETS_IMPORT_LEADS - Headers found:', headers);
       console.log('[IPC] SHEETS_IMPORT_LEADS - Leads parsed from sheet:', leads.length, 'of', totalRows);
       console.log('[IPC] SHEETS_IMPORT_LEADS - Already processed:', alreadyProcessed);
@@ -908,7 +911,7 @@ export function registerAllHandlers(): void {
       const leadsWithSource = leads.map(lead => ({
         ...lead,
         sourceSpreadsheetId,
-        sourceSheetName: sheetName,
+        sourceSheetName: sheetTabName,  // Use actual tab name for API calls
       }));
 
       // 4. Validate leads through existing CSV validation pipeline
