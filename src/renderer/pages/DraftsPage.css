@@ -181,6 +181,19 @@
   color: var(--danger-text);
 }
 
+.status-badge.badge-manual {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+  text-transform: uppercase;
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+}
+
+.no-recipient {
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 /* Card Body */
 .draft-card-subject {
   font-size: 0.9rem;

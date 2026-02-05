@@ -1,11 +1,11 @@
 import { google, sheets_v4 } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
-import { SheetRow, ScanStatus } from '../../shared/types';
+import { SheetRow, ScanStatus, ScanSource } from '../../shared/types';
 
 const SHEET_HEADERS = [
   'Company', 'Website URL', 'Contact Name', 'Contact Email',
   'Scan Status', 'Screenshot URL', 'Diagnostics', 'Email Subject',
-  'Email Body', 'Email Status', 'Draft ID', 'Scheduled Time', 'Sent Time',
+  'Email Body', 'Email Status', 'Draft ID', 'Scheduled Time', 'Sent Time', 'Scan Source',
 ];
 
 const COLUMN_MAP: Record<keyof SheetRow, string> = {
@@ -22,6 +22,7 @@ const COLUMN_MAP: Record<keyof SheetRow, string> = {
   draft_id: 'K',
   scheduled_time: 'L',
   sent_time: 'M',
+  scan_source: 'N',
 };
 
 const DATA_START_ROW = 2;
@@ -43,6 +44,7 @@ function rowToArray(row: SheetRow): string[] {
     row.draft_id || '',
     row.scheduled_time || '',
     row.sent_time || '',
+    row.scan_source || 'list',
   ];
 }
 
@@ -61,6 +63,7 @@ function arrayToRow(arr: string[]): SheetRow {
     draft_id: arr[10] || undefined,
     scheduled_time: arr[11] || undefined,
     sent_time: arr[12] || undefined,
+    scan_source: (arr[13] as ScanSource) || 'list', // Default to 'list' for backward compatibility
   };
 }
 
@@ -124,7 +127,7 @@ export class SheetsService {
       const rowArrays = rows.map(rowToArray);
       await this.sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: `'${sheetName}'!A:M`,
+        range: `'${sheetName}'!A:N`,
         valueInputOption: 'USER_ENTERED',
         insertDataOption: 'INSERT_ROWS',
         requestBody: { values: rowArrays },
@@ -140,7 +143,7 @@ export class SheetsService {
       const sheetName = await this.getSheetName(spreadsheetId);
       const res = await this.sheets.spreadsheets.values.get({
         spreadsheetId,
-        range: `'${sheetName}'!A${DATA_START_ROW}:L`,
+        range: `'${sheetName}'!A${DATA_START_ROW}:N`,
       });
 
       const values = res.data.values;

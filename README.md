@@ -4,6 +4,7 @@ A desktop application that scans websites for conversion issues, annotates scree
 
 ## Features
 
+- **Quick Scan** - Instantly scan any website URL without importing a list — perfect for one-off analyses
 - **Website Scanning** - Automatically scans websites using Playwright, measuring load times (LCP) and capturing viewport screenshots
 - **AI-Powered Analysis** - Uses Gemini Vision AI to detect conversion issues in hero sections (CTAs, headlines, trust signals, imagery)
 - **Annotated Screenshots** - Generates visually annotated screenshots highlighting specific problems with severity indicators
@@ -85,11 +86,54 @@ npm run package
 ## Workflow
 
 1. **Setup** - Configure Google authentication and Gemini API key
-2. **Upload** - Import leads from CSV or Google Sheets (company name, website, contact info)
+2. **Upload** - Import leads from CSV, Google Sheets, or use Quick Scan for single URLs
 3. **Scan** - The app scans each website, capturing screenshots and running diagnostics
 4. **Review** - AI analyzes hero sections and annotates screenshots with conversion issues
 5. **Drafts** - Review and approve AI-generated personalized emails
 6. **Schedule** - Set send intervals and time windows for approved emails
+
+### Quick Scan vs List Import
+
+| Feature | Quick Scan | List Import |
+|---------|------------|-------------|
+| Input | Single URL | CSV or Google Sheets |
+| Contact Info | Not required | Required for emails |
+| Gmail Draft | Not created | Created automatically |
+| Best For | Quick website audits | Outreach campaigns |
+| Drafts Badge | "NOT FROM LIST" (red) | Normal status badge |
+
+## Quick Scan
+
+Quick Scan allows you to instantly analyze any website without importing a lead list. This is useful for:
+
+- Quick website audits before sales calls
+- Checking competitors' landing pages
+- Testing the scanner on specific URLs
+- Generating analysis reports without contact info
+
+### How to Use Quick Scan
+
+1. Navigate to the **Upload** page
+2. Select the **Quick Scan** tab
+3. Enter a website URL (required)
+4. Optionally add:
+   - **Company Name** — Defaults to the domain if not provided
+   - **Contact Name** — For personalized email greeting
+   - **Contact Email** — Enables Gmail draft creation
+5. Click **Scan Website**
+
+### Quick Scan Behavior
+
+| With Contact Email | Without Contact Email |
+|-------------------|----------------------|
+| Gmail draft created | No draft created |
+| Normal status badge | Red "NOT FROM LIST" badge |
+| Full email workflow | Use "Copy Draft" button |
+
+- **Results always saved to Google Sheets** — All scans are recorded regardless of contact info
+- **Automatic source detection** — Adding contact email treats it as a list import
+
+---
 
 ## Lead Import Format
 

@@ -4,6 +4,65 @@
   gap: 20px;
 }
 
+/* Quick Scan Section */
+.quick-scan-section {
+  background: var(--bg-surface);
+  border-radius: var(--radius-xl);
+  padding: 24px;
+  margin-top: 8px;
+}
+
+.quick-scan-description {
+  margin: 0 0 16px;
+  font-size: 0.85rem;
+  color: var(--text-tertiary);
+}
+
+.quick-scan-inputs {
+  display: flex;
+  gap: 16px;
+}
+
+.quick-scan-field {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quick-scan-field label {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.quick-scan-field .input--full {
+  width: 100%;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  padding: 12px 16px;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.quick-scan-field .input--full:focus {
+  border-color: var(--accent-primary);
+}
+
+.quick-scan-field .input--full::placeholder {
+  color: var(--text-placeholder);
+}
+
+.quick-scan-hint {
+  margin: 12px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  font-style: italic;
+}
+
 /* Upload Zone */
 .upload-zone {
   border: 2px dashed var(--border-default);
@@ -393,6 +452,19 @@
    ============================================ */
 
 @media (max-width: 768px) {
+  .quick-scan-section {
+    padding: 20px;
+  }
+
+  .quick-scan-inputs {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .quick-scan-section .btn {
+    width: 100%;
+  }
+
   .upload-page {
     padding-bottom: 100px;
   }
@@ -478,6 +550,23 @@
 }
 
 @media (max-width: 480px) {
+  .quick-scan-section {
+    padding: 16px;
+  }
+
+  .quick-scan-section h3 {
+    font-size: 1rem;
+  }
+
+  .quick-scan-description {
+    font-size: var(--text-xs);
+  }
+
+  .quick-scan-field .input--full {
+    padding: 8px 12px;
+    font-size: var(--text-sm);
+  }
+
   .upload-page {
     padding-bottom: 120px;
   }

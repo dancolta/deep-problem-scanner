@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import type { ScanProgress, ScanPhase, ScanCompletionSummary } from '../../shared/types';
+import type { ScanProgress, ScanPhase, ScanCompletionSummary, ScanSource } from '../../shared/types';
 
 interface ScanState {
   progress: ScanProgress;
@@ -15,7 +15,7 @@ interface ScanState {
 }
 
 interface ScanContextValue extends ScanState {
-  startScan: (leads: unknown[], spreadsheetId: string) => void;
+  startScan: (leads: unknown[], spreadsheetId: string, scanSource?: ScanSource) => void;
   cancelScan: () => void;
   resetScan: () => void;
 }
@@ -114,7 +114,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
     };
   }, [scanStartedAt]);
 
-  const startScan = useCallback((leads: unknown[], spreadsheetId: string) => {
+  const startScan = useCallback((leads: unknown[], spreadsheetId: string, scanSource: ScanSource = 'list') => {
     setProgress({ ...EMPTY_PROGRESS, total: leads.length });
     setIsScanning(true);
     setIsComplete(false);
@@ -126,7 +126,7 @@ export function ScanProvider({ children }: { children: React.ReactNode }) {
     setScanStartedAt(Date.now());
 
     // Fire-and-forget — don't await
-    window.electronAPI.invoke(IPC_CHANNELS.SCAN_START, { leads, spreadsheetId }).catch((err: unknown) => {
+    window.electronAPI.invoke(IPC_CHANNELS.SCAN_START, { leads, spreadsheetId, scanSource }).catch((err: unknown) => {
       console.error('[ScanContext] Scan failed:', err);
       setIsScanning(false);
     });

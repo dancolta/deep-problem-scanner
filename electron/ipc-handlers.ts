@@ -9,7 +9,7 @@ import { drawAnnotations } from '../src/services/annotation/drawing';
 import { compressImage, compressForEmail } from '../src/services/annotation/compression';
 import { AnnotationCoord } from '../src/services/annotation/types';
 import { VerifiedIssue } from '../src/services/scanner/playwright-scanner';
-import type { ScanPhase, ScanCompletionSummary, Lead } from '../src/shared/types';
+import type { ScanPhase, ScanCompletionSummary, Lead, ScanSource } from '../src/shared/types';
 import { SheetsLeadImporter, extractSpreadsheetId, extractGid } from '../src/services/google/sheets-lead-importer';
 
 const PHASE_DESCRIPTIONS: Record<ScanPhase, string> = {
@@ -277,7 +277,7 @@ export function registerAllHandlers(): void {
   // --- Scan (full pipeline with section-based screenshots) ---
   ipcMain.handle(
     IPC_CHANNELS.SCAN_START,
-    async (event, { leads, spreadsheetId }: { leads: any[]; spreadsheetId?: string }) => {
+    async (event, { leads, spreadsheetId, scanSource = 'list' }: { leads: any[]; spreadsheetId?: string; scanSource?: ScanSource }) => {
       try {
         // Load settings for API keys
         let pageSpeedApiKey: string | undefined;
@@ -440,6 +440,7 @@ export function registerAllHandlers(): void {
                   email_subject: '',
                   email_body: '',
                   email_status: 'skip' as const,
+                  scan_source: scanSource,
                 },
                 issueCount: 0,
               });
@@ -580,9 +581,13 @@ export function registerAllHandlers(): void {
             }
             console.log(`[IPC] ======================================`);
 
+            // For manual scans without contact info, use generic greeting
+            const isManualScan = scanSource === 'manual' || !lead.contact_email;
+            const contactNameForEmail = isManualScan ? '' : lead.contact_name;
+
             const promptContext = buildPromptContext({
               companyName: lead.company_name,
-              contactName: lead.contact_name,
+              contactName: contactNameForEmail,
               websiteUrl: lead.website_url,
               diagnostics: diagnosticsForEmail,
               screenshotUrl: driveResults[0]?.directLink || '',
@@ -615,11 +620,12 @@ export function registerAllHandlers(): void {
               email_subject: email.subject,
               email_body: email.body,
               email_status: 'draft' as const,
+              scan_source: scanSource,
             };
 
-            // 7. Create Gmail draft with embedded images
+            // 7. Create Gmail draft with embedded images (skip if no contact email - manual scan)
             sendPhaseProgress('creating_draft', i, lead.website_url);
-            if (sectionScreenshots.length > 0) {
+            if (sectionScreenshots.length > 0 && lead.contact_email) {
               const draftPayload = {
                 to: lead.contact_email,
                 subject: email.subject,
@@ -638,6 +644,8 @@ export function registerAllHandlers(): void {
                   console.error(`[IPC] Gmail draft failed:`, draftError);
                 }
               );
+            } else if (!lead.contact_email) {
+              console.log(`[IPC] Skipping Gmail draft for manual scan (no contact email)`);
             }
 
             // Mark lead as processed in source sheet (if imported from Google Sheets)
