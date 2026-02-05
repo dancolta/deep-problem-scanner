@@ -1,11 +1,11 @@
 import React, { useState, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import { Lead } from '../../shared/types';
+import { Lead, ScanSource } from '../../shared/types';
 import { useScan } from '../context/ScanContext';
 import './UploadPage.css';
 
-type ImportSource = 'csv' | 'sheets';
+type ImportSource = 'quick' | 'sheets' | 'csv';
 
 interface PipelineResult {
   leads: Lead[];
@@ -44,6 +44,13 @@ export default function UploadPage() {
   const navigate = useNavigate();
   const { startScan } = useScan();
 
+  // Quick Scan state
+  const [quickScanUrl, setQuickScanUrl] = useState('');
+  const [quickScanName, setQuickScanName] = useState('');
+  const [quickScanContactName, setQuickScanContactName] = useState('');
+  const [quickScanContactEmail, setQuickScanContactEmail] = useState('');
+  const [quickScanError, setQuickScanError] = useState<string | null>(null);
+
   // New state variables for tabbed interface
   const [importSource, setImportSource] = useState<ImportSource>('sheets');
   const [sheetsUrl, setSheetsUrl] = useState('');
@@ -58,6 +65,35 @@ export default function UploadPage() {
   }, [sheetsUrl]);
 
   const isValidSheetsUrl = Boolean(sheetsId) || (sheetsUrl.length > 20 && /^[a-zA-Z0-9_-]+$/.test(sheetsUrl));
+
+  // Quick Scan URL validation and domain extraction
+  const normalizeUrl = useCallback((url: string): string => {
+    let normalized = url.trim();
+    if (normalized && !normalized.match(/^https?:\/\//i)) {
+      normalized = 'https://' + normalized;
+    }
+    return normalized;
+  }, []);
+
+  const extractDomain = useCallback((url: string): string => {
+    try {
+      const normalized = normalizeUrl(url);
+      const urlObj = new URL(normalized);
+      return urlObj.hostname.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
+  }, [normalizeUrl]);
+
+  const isValidUrl = useCallback((url: string): boolean => {
+    try {
+      const normalized = normalizeUrl(url);
+      new URL(normalized);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [normalizeUrl]);
 
   const parseFile = useCallback(async (selectedFile: File) => {
     setFile(selectedFile);
@@ -151,6 +187,11 @@ export default function UploadPage() {
     setSheetsStatus('idle');
     setSheetsError(null);
     setSheetName(null);
+    setQuickScanUrl('');
+    setQuickScanName('');
+    setQuickScanContactName('');
+    setQuickScanContactEmail('');
+    setQuickScanError(null);
 
     setImportSource(newSource);
   }, [importSource, handleClear]);
@@ -193,6 +234,54 @@ export default function UploadPage() {
   const handleRefreshFromSheets = useCallback(async () => {
     await handleImportFromSheets();
   }, [handleImportFromSheets]);
+
+  // Quick Scan handler
+  const handleQuickScan = useCallback(async () => {
+    setQuickScanError(null);
+
+    if (!quickScanUrl.trim()) {
+      setQuickScanError('Please enter a website URL');
+      return;
+    }
+
+    if (!isValidUrl(quickScanUrl)) {
+      setQuickScanError('Please enter a valid URL');
+      return;
+    }
+
+    const normalizedUrl = normalizeUrl(quickScanUrl);
+    const displayName = quickScanName.trim() || extractDomain(quickScanUrl);
+    const contactName = quickScanContactName.trim();
+    const contactEmail = quickScanContactEmail.trim();
+    const hasContact = Boolean(contactEmail);
+
+    // Create a manual Lead object - if contact info provided, treat as list import
+    const manualLead: Lead = {
+      company_name: displayName,
+      website_url: normalizedUrl,
+      contact_name: contactName,
+      contact_email: contactEmail,
+      scanSource: hasContact ? 'list' : 'manual',
+      hasContactInfo: hasContact,
+    };
+
+    try {
+      const settingsResponse = await window.electronAPI.invoke(
+        IPC_CHANNELS.SETTINGS_GET
+      ) as { success?: boolean; settings?: { googleSheetUrl?: string } } | null;
+
+      const sheetUrl = settingsResponse?.settings?.googleSheetUrl || '';
+      const match = sheetUrl.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+      const spreadsheetId = match ? match[1] : '';
+
+      // Start scan - use 'list' source if contact info provided, otherwise 'manual'
+      startScan([manualLead], spreadsheetId, hasContact ? 'list' : 'manual');
+      navigate('/scan');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to start scan';
+      setQuickScanError(message);
+    }
+  }, [quickScanUrl, quickScanName, quickScanContactName, quickScanContactEmail, isValidUrl, normalizeUrl, extractDomain, startScan, navigate]);
 
   const getLeadsToScan = useCallback((): Lead[] => {
     if (!parseResult) return [];
@@ -237,6 +326,12 @@ export default function UploadPage() {
       {/* Import method tabs */}
       <div className="import-tabs">
         <button
+          className={`import-tab ${importSource === 'quick' ? 'import-tab--active' : ''}`}
+          onClick={() => handleTabSwitch('quick')}
+        >
+          Quick Scan
+        </button>
+        <button
           className={`import-tab ${importSource === 'sheets' ? 'import-tab--active' : ''}`}
           onClick={() => handleTabSwitch('sheets')}
         >
@@ -249,6 +344,73 @@ export default function UploadPage() {
           CSV File
         </button>
       </div>
+
+      {importSource === 'quick' && (
+        <div className="quick-scan-section">
+          <p className="quick-scan-description">Scan any website instantly without importing a list</p>
+          <div className="quick-scan-inputs">
+            <div className="quick-scan-field">
+              <label>Website URL *</label>
+              <input
+                type="text"
+                value={quickScanUrl}
+                onChange={(e) => {
+                  setQuickScanUrl(e.target.value);
+                  setQuickScanError(null);
+                }}
+                placeholder="example.com or https://example.com"
+                className="input input--full"
+              />
+            </div>
+            <div className="quick-scan-field">
+              <label>Company Name (optional)</label>
+              <input
+                type="text"
+                value={quickScanName}
+                onChange={(e) => setQuickScanName(e.target.value)}
+                placeholder="Defaults to domain"
+                className="input input--full"
+              />
+            </div>
+          </div>
+          <div className="quick-scan-inputs" style={{ marginTop: '12px' }}>
+            <div className="quick-scan-field">
+              <label>Contact Name (optional)</label>
+              <input
+                type="text"
+                value={quickScanContactName}
+                onChange={(e) => setQuickScanContactName(e.target.value)}
+                placeholder="John Smith"
+                className="input input--full"
+              />
+            </div>
+            <div className="quick-scan-field">
+              <label>Contact Email (optional)</label>
+              <input
+                type="email"
+                value={quickScanContactEmail}
+                onChange={(e) => setQuickScanContactEmail(e.target.value)}
+                placeholder="john@example.com"
+                className="input input--full"
+              />
+            </div>
+          </div>
+          <p className="quick-scan-hint">
+            Add contact info to create a Gmail draft automatically
+          </p>
+          {quickScanError && (
+            <div className="banner banner--error" style={{ marginTop: '12px' }}>{quickScanError}</div>
+          )}
+          <button
+            className="btn btn--primary"
+            onClick={handleQuickScan}
+            disabled={!quickScanUrl.trim()}
+            style={{ marginTop: '16px' }}
+          >
+            Scan Website
+          </button>
+        </div>
+      )}
 
       {importSource === 'csv' && (
         <div

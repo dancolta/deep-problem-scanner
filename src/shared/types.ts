@@ -1,6 +1,9 @@
 // Scan-related types (renderer-safe versions - no Buffer)
 export type ScanStatus = 'SUCCESS' | 'FAILED' | 'BLOCKED' | 'TIMEOUT';
 
+// Scan source tracking - distinguishes list imports from manual quick scans
+export type ScanSource = 'list' | 'manual';
+
 export type ScanPhase =
   | 'initializing'
   | 'opening_page'
@@ -39,7 +42,10 @@ export interface Lead {
   sourceSpreadsheetId?: string;
   sourceSheetName?: string;
   sourceRowNumber?: number;
-  [key: string]: string | number | undefined; // Additional columns
+  // Quick Scan tracking
+  scanSource?: ScanSource;
+  hasContactInfo?: boolean;
+  [key: string]: string | number | boolean | undefined; // Additional columns
 }
 
 export interface ScanProgress {
@@ -98,4 +104,5 @@ export interface SheetRow {
   draft_id?: string;
   scheduled_time?: string;
   sent_time?: string;
+  scan_source?: ScanSource;
 }

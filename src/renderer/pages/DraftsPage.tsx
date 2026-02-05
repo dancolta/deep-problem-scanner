@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
-import type { SheetRow, AppSettings } from '../../shared/types';
+import type { SheetRow, AppSettings, ScanSource } from '../../shared/types';
 import './DraftsPage.css';
 
 type DraftStatus = 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
@@ -17,6 +17,8 @@ interface LocalDraft {
   body: string;
   screenshotUrl: string;
   status: DraftStatus;
+  scanSource?: ScanSource;
+  isManualScan: boolean;
 }
 
 /**
@@ -25,19 +27,23 @@ interface LocalDraft {
  *
  * A valid draft must have:
  * - company_name (required for display)
- * - contact_email (required for sending)
+ * - contact_email (required for sending) OR scan_source='manual' (Quick Scan)
  * - At least email_subject OR email_body (actual draft content)
  */
 function isValidDraft(row: SheetRow): boolean {
   const hasCompanyName = Boolean(row.company_name?.trim());
   const hasContactEmail = Boolean(row.contact_email?.trim());
+  const isManualScan = row.scan_source === 'manual';
   const hasEmailContent = Boolean(row.email_subject?.trim() || row.email_body?.trim());
 
-  return hasCompanyName && hasContactEmail && hasEmailContent;
+  // Manual scans don't require contact email
+  return hasCompanyName && (hasContactEmail || isManualScan) && hasEmailContent;
 }
 
 function mapRowToDraft(row: SheetRow, index: number): LocalDraft {
   const emailStatus = row.email_status || 'draft';
+  // Detect manual scan by explicit scan_source OR missing contact email
+  const isManualScan = row.scan_source === 'manual' || !row.contact_email?.trim();
   return {
     id: index,
     companyName: row.company_name,
@@ -48,6 +54,8 @@ function mapRowToDraft(row: SheetRow, index: number): LocalDraft {
     body: row.email_body || '',
     screenshotUrl: row.screenshot_url || '',
     status: emailStatus as DraftStatus,
+    scanSource: row.scan_source,
+    isManualScan,
   };
 }
 
@@ -161,6 +169,17 @@ export default function DraftsPage() {
     [updateSheetRow]
   );
 
+  const handleCopyDraft = useCallback(async (draft: LocalDraft) => {
+    const textToCopy = `Subject: ${draft.subject}\n\n${draft.body}`;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setSyncMessage('Draft copied to clipboard');
+      setTimeout(() => setSyncMessage(null), 3000);
+    } catch (err) {
+      console.error('Failed to copy draft:', err);
+    }
+  }, []);
+
   const startEdit = useCallback((draft: LocalDraft) => {
     setEditingId(draft.id);
     setEditSubject(draft.subject);
@@ -182,13 +201,19 @@ export default function DraftsPage() {
     setEditingId(null);
   }, [editingId, editSubject, editBody, updateSheetRow]);
 
-  const badgeClass = (status: DraftStatus) => {
+  const badgeClass = (status: DraftStatus, isManual?: boolean) => {
+    if (isManual) return 'badge-manual';
     if (status === 'approved') return 'badge-approved';
     if (status === 'scheduled') return 'badge-scheduled';
     if (status === 'rejected') return 'badge-rejected';
     if (status === 'sent') return 'badge-sent';
     if (status === 'failed') return 'badge-failed';
     return 'badge-draft';
+  };
+
+  const getBadgeLabel = (status: DraftStatus, isManual?: boolean) => {
+    if (isManual) return 'NOT FROM LIST';
+    return status;
   };
 
   const cardClass = (status: DraftStatus) => `draft-card status-${status}`;
@@ -265,11 +290,15 @@ export default function DraftsPage() {
                 <div className="draft-card-meta">
                   <h3>{draft.companyName}</h3>
                   <span className="contact-info">
-                    {draft.contactName} &mdash; {draft.contactEmail}
+                    {draft.isManualScan ? (
+                      <span className="no-recipient">No recipient — from Quick Scan</span>
+                    ) : (
+                      <>{draft.contactName} &mdash; {draft.contactEmail}</>
+                    )}
                   </span>
                 </div>
-                <span className={`status-badge ${badgeClass(draft.status)}`}>
-                  {draft.status}
+                <span className={`status-badge ${badgeClass(draft.status, draft.isManualScan)}`}>
+                  {getBadgeLabel(draft.status, draft.isManualScan)}
                 </span>
               </div>
 
@@ -300,7 +329,10 @@ export default function DraftsPage() {
 
               <div className="draft-card-actions">
                 {editingId !== draft.id && (
-                  <button onClick={() => startEdit(draft)}>Edit</button>
+                  <>
+                    <button onClick={() => startEdit(draft)}>Edit</button>
+                    <button onClick={() => handleCopyDraft(draft)}>Copy Draft</button>
+                  </>
                 )}
               </div>
             </div>
