@@ -5,7 +5,7 @@ import type { SheetRow, AppSettings, ScanSource } from '../../shared/types';
 import './DraftsPage.css';
 
 type DraftStatus = 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
-type FilterTab = 'all' | 'draft';
+type FilterTab = 'all';
 
 interface LocalDraft {
   id: number;
@@ -220,7 +220,6 @@ export default function DraftsPage() {
 
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: 'All' },
-    { key: 'draft', label: 'Draft' },
   ];
 
   if (loading) {
