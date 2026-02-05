@@ -117,10 +117,10 @@ export default function UploadPage() {
         setParseResult(response.result);
         setRangeEnd(Math.max(response.result.leads.length - 1, 0));
       } else {
-        setParseError(response.error || 'Failed to parse CSV file.');
+        setParseError(response.error || 'Failed to parse lead list.');
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Unknown error parsing CSV';
+      const message = err instanceof Error ? err.message : 'Unknown error parsing lead list';
       setParseError(message);
     } finally {
       setIsLoading(false);
@@ -155,7 +155,7 @@ export default function UploadPage() {
     if (droppedFile && droppedFile.name.endsWith('.csv')) {
       parseFile(droppedFile);
     } else {
-      setParseError('Please drop a valid CSV file.');
+      setParseError('Please drop a valid CSV file (.csv)');
     }
   }, [parseFile]);
 
@@ -321,16 +321,10 @@ export default function UploadPage() {
   return (
     <div className="page upload-page">
       <h2>Upload Leads</h2>
-      <p>Upload a CSV file with leads to scan and reach out to.</p>
+      <p>Import leads to scan and reach out to.</p>
 
       {/* Import method tabs */}
       <div className="import-tabs">
-        <button
-          className={`import-tab ${importSource === 'quick' ? 'import-tab--active' : ''}`}
-          onClick={() => handleTabSwitch('quick')}
-        >
-          Quick Scan
-        </button>
         <button
           className={`import-tab ${importSource === 'sheets' ? 'import-tab--active' : ''}`}
           onClick={() => handleTabSwitch('sheets')}
@@ -338,10 +332,16 @@ export default function UploadPage() {
           Google Sheets
         </button>
         <button
+          className={`import-tab ${importSource === 'quick' ? 'import-tab--active' : ''}`}
+          onClick={() => handleTabSwitch('quick')}
+        >
+          Quick Scan
+        </button>
+        <button
           className={`import-tab ${importSource === 'csv' ? 'import-tab--active' : ''}`}
           onClick={() => handleTabSwitch('csv')}
         >
-          CSV File
+          Lead List
         </button>
       </div>
 
@@ -430,13 +430,13 @@ export default function UploadPage() {
           {isLoading ? (
             <>
               <div className="upload-icon">&#8987;</div>
-              <p className="upload-text">Parsing CSV...</p>
+              <p className="upload-text">Parsing lead list...</p>
             </>
           ) : !file ? (
             <>
               <div className="upload-icon">&#128193;</div>
-              <p className="upload-text">Drag &amp; drop a CSV file here</p>
-              <p className="upload-subtext">or click to browse</p>
+              <p className="upload-text">Drag &amp; drop a lead list here</p>
+              <p className="upload-subtext">CSV format - click to browse</p>
             </>
           ) : (
             <>
