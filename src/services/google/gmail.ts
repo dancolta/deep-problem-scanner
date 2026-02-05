@@ -136,9 +136,9 @@ export class GmailService {
     const mimeType = `image/${imageFormat}`;
     const filename = `screenshot.${imageFormat}`;
 
-    // Fetch user's Gmail signature (always use default/primary, not alias-specific)
-    const signature = await this.getSignature();
-    console.log('[GmailService] Signature for draft:', signature ? `${signature.length} chars` : 'empty');
+    // Fetch signature for the sender address (uses alias-specific signature if fromEmail provided)
+    const signature = await this.getSignature(draft.fromEmail);
+    console.log('[GmailService] Signature for draft:', signature ? `${signature.length} chars` : 'empty', draft.fromEmail ? `(for ${draft.fromEmail})` : '(default)');
     const signatureHtml = signature ? `<br><br><div class="gmail_signature">${signature}</div>` : '';
 
     // Build HTML body: replace [IMAGE] placeholder with inline image, wrap in HTML
