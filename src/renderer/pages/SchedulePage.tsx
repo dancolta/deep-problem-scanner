@@ -41,12 +41,18 @@ function isValidScheduleRow(row: SheetRow): boolean {
 /**
  * Format a date/time string for display in a specific timezone.
  * Returns formatted string like "Feb 15, 2:00 PM" with timezone abbreviation.
+ * Handles format: "2026-02-06 13:00 (Los Angeles)|ISO:2026-02-06T21:00:00.000Z"
  */
 function formatTimeInTimezone(dateStr: string | undefined, tz: string): string {
   if (!dateStr) return '-';
   try {
-    const date = new Date(dateStr);
-    if (isNaN(date.getTime())) return dateStr;
+    // Extract ISO timestamp if present (format: "readable|ISO:timestamp")
+    let dateToParse = dateStr;
+    if (dateStr.includes('|ISO:')) {
+      dateToParse = dateStr.split('|ISO:')[1];
+    }
+    const date = new Date(dateToParse);
+    if (isNaN(date.getTime())) return dateStr.split('|')[0]; // Return readable part if parse fails
     const formatted = date.toLocaleString('en-US', {
       timeZone: tz,
       month: 'short',
@@ -224,15 +230,22 @@ export default function SchedulePage() {
     }
     setConfigError(null);
     await saveScheduleConfig();
-    await window.electronAPI.invoke(IPC_CHANNELS.SCHEDULER_START, {
+    const result = await window.electronAPI.invoke(IPC_CHANNELS.SCHEDULER_START, {
       scheduleStartDate: startDate,
       scheduleStartTime: startTime,
       scheduleEndTime: endTime,
       minIntervalMinutes: minInterval,
       maxIntervalMinutes: maxInterval,
-    });
-    setSchedulerStatus('running');
-    addLogEntry('Scheduler started');
+    }) as any;
+
+    if (result?.success) {
+      setSchedulerStatus('running');
+      addLogEntry('Scheduler started');
+      // Refetch data to show updated statuses immediately
+      await loadFromSheet();
+    } else {
+      addLogEntry(`Failed to start: ${result?.error || 'Unknown error'}`);
+    }
   };
 
   const handleStop = async () => {

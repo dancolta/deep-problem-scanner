@@ -151,10 +151,15 @@ export class SheetsLeadImporter {
     console.log('[SheetsImporter] Total leads parsed:', leads.length);
     console.log('[SheetsImporter] Already processed:', alreadyProcessed);
 
+    // Count only rows that have actual data (not empty/formatted rows)
+    const actualDataRows = rows.slice(1).filter((row: any[]) =>
+      row && row.some((cell: any) => cell && String(cell).trim())
+    ).length;
+
     return {
       leads,
       sheetName: spreadsheetName,
-      totalRows: rows.length - 1,
+      totalRows: actualDataRows,
       headers,
       alreadyProcessed,
       spreadsheetId,

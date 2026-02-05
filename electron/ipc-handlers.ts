@@ -1157,7 +1157,9 @@ export function registerAllHandlers(): void {
 
         const scheduledTime = new Date(scheduledTimeMs);
 
-        // Format scheduled time in lead's timezone for readability
+        // Store scheduled time in human-readable format with timezone label
+        // Format: "2026-02-06 13:00 (Los Angeles)" - readable in sheet
+        // Also store ISO at end for UI parsing: "|ISO:2026-02-06T21:00:00.000Z"
         const formattedTime = scheduledTime.toLocaleString('en-CA', {
           timeZone: timezone,
           year: 'numeric',
@@ -1165,11 +1167,10 @@ export function registerAllHandlers(): void {
           day: '2-digit',
           hour: '2-digit',
           minute: '2-digit',
-          second: '2-digit',
           hour12: false,
-        }).replace(', ', '|');
+        }).replace(',', '');
         const tzShort = timezone.split('/').pop()?.replace(/_/g, ' ') || timezone;
-        const readableScheduledTime = `${formattedTime} (${tzShort})`;
+        const readableScheduledTime = `${formattedTime} (${tzShort})|ISO:${scheduledTime.toISOString()}`;
 
         if (row.email_status !== 'scheduled' || isRescheduled) {
           console.log(`[IPC] Email ${index}: ${row.company_name} -> scheduled at ${readableScheduledTime}`);
