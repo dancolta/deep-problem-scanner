@@ -17,6 +17,6 @@ export interface GoogleServiceConfig {
 export const GOOGLE_SCOPES = [
   'https://www.googleapis.com/auth/spreadsheets',
   'https://www.googleapis.com/auth/drive.file',
-  'https://www.googleapis.com/auth/gmail.compose',
+  'https://www.googleapis.com/auth/gmail.modify',  // Includes compose + label management
   'https://www.googleapis.com/auth/gmail.settings.basic',
 ];

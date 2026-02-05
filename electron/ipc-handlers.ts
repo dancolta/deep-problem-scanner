@@ -623,11 +623,11 @@ export function registerAllHandlers(): void {
               scan_source: scanSource,
             };
 
-            // 7. Create Gmail draft with embedded images (skip if no contact email - manual scan)
+            // 7. Create Gmail draft with embedded images (always, even for manual scans)
             sendPhaseProgress('creating_draft', i, lead.website_url);
-            if (sectionScreenshots.length > 0 && lead.contact_email) {
+            if (sectionScreenshots.length > 0) {
               const draftPayload = {
-                to: lead.contact_email,
+                to: lead.contact_email || '',  // Empty for manual scans - user can add recipient in Gmail
                 subject: email.subject,
                 body: email.body,
                 screenshotDriveUrl: driveResults[0]?.directLink || '',
@@ -635,17 +635,18 @@ export function registerAllHandlers(): void {
                 status: 'draft' as const,
               };
 
-              gmail.createDraft(draftPayload, sectionScreenshots[0].buffer).then(
+              // Apply "NOT FROM LIST" label for manual scans (no recipient)
+              const labelForDraft = isManualScan ? 'NOT FROM LIST' : undefined;
+
+              gmail.createDraft(draftPayload, sectionScreenshots[0].buffer, labelForDraft).then(
                 (draftResult) => {
                   sheetRow.draft_id = draftResult.draftId;
-                  console.log(`[IPC] Gmail draft created: ${draftResult.draftId}`);
+                  console.log(`[IPC] Gmail draft created: ${draftResult.draftId}${labelForDraft ? ` with label "${labelForDraft}"` : ''}`);
                 },
                 (draftError) => {
                   console.error(`[IPC] Gmail draft failed:`, draftError);
                 }
               );
-            } else if (!lead.contact_email) {
-              console.log(`[IPC] Skipping Gmail draft for manual scan (no contact email)`);
             }
 
             // Mark lead as processed in source sheet (if imported from Google Sheets)

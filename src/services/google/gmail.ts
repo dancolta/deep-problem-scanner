@@ -58,7 +58,37 @@ export class GmailService {
     }
   }
 
-  async createDraft(draft: EmailDraft, emailBuffer?: Buffer): Promise<{ draftId: string; threadId: string }> {
+  /**
+   * Ensures a Gmail label exists, creating it if necessary
+   */
+  async ensureLabel(labelName: string): Promise<string> {
+    const labels = await this.gmail.users.labels.list({ userId: 'me' });
+    const existing = labels.data.labels?.find(l => l.name === labelName);
+    if (existing?.id) return existing.id;
+
+    const created = await this.gmail.users.labels.create({
+      userId: 'me',
+      requestBody: {
+        name: labelName,
+        labelListVisibility: 'labelShow',
+        messageListVisibility: 'show',
+      },
+    });
+    return created.data.id!;
+  }
+
+  /**
+   * Applies a label to a draft's underlying message
+   */
+  async applyLabelToDraft(messageId: string, labelId: string): Promise<void> {
+    await this.gmail.users.messages.modify({
+      userId: 'me',
+      id: messageId,
+      requestBody: { addLabelIds: [labelId] },
+    });
+  }
+
+  async createDraft(draft: EmailDraft, emailBuffer?: Buffer, labelName?: string): Promise<{ draftId: string; threadId: string }> {
     let imageBuffer: Buffer | null = emailBuffer ?? null;
 
     if (!imageBuffer && draft.screenshotDriveUrl) {
@@ -119,10 +149,24 @@ export class GmailService {
         },
       });
 
-      return {
-        draftId: response.data.id!,
-        threadId: response.data.message?.threadId || '',
-      };
+      const draftId = response.data.id!;
+      const messageId = response.data.message?.id;
+      const threadId = response.data.message?.threadId || '';
+
+      // Apply label if provided
+      if (labelName && messageId) {
+        try {
+          const labelId = await this.ensureLabel(labelName);
+          await this.applyLabelToDraft(messageId, labelId);
+          console.log(`[GmailService] Applied label "${labelName}" to draft ${draftId}`);
+        } catch (labelError: unknown) {
+          const err = labelError as { message?: string };
+          console.error(`[GmailService] Failed to apply label "${labelName}":`, err.message);
+          // Non-blocking - continue without label
+        }
+      }
+
+      return { draftId, threadId };
     } catch (error: unknown) {
       const gaxiosError = error as { code?: number; message?: string };
       if (gaxiosError.code === 401) {
@@ -225,11 +269,11 @@ export class GmailService {
   ): string {
     const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
-    const mimeLines: string[] = [
-      `MIME-Version: 1.0`,
-      `To: ${to}`,
-      `Subject: ${subject}`,
-    ];
+    const mimeLines: string[] = ['MIME-Version: 1.0'];
+    if (to.trim()) {
+      mimeLines.push(`To: ${to}`);
+    }
+    mimeLines.push(`Subject: ${subject}`);
 
     if (imageBuffer && filename) {
       mimeLines.push(`Content-Type: multipart/related; boundary="${boundary}"`);
