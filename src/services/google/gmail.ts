@@ -11,10 +11,37 @@ export class GmailService {
   }
 
   /**
+   * Fetch all available sendAs addresses for the authenticated user
+   */
+  async getSendAsAddresses(): Promise<{ email: string; displayName?: string; isDefault: boolean; isPrimary: boolean }[]> {
+    try {
+      console.log('[GmailService] Fetching sendAs addresses from Gmail API...');
+      const response = await this.gmail.users.settings.sendAs.list({
+        userId: 'me',
+      });
+
+      const sendAsAddresses = response.data.sendAs || [];
+      console.log('[GmailService] Found', sendAsAddresses.length, 'sendAs addresses');
+
+      return sendAsAddresses.map(addr => ({
+        email: addr.sendAsEmail || '',
+        displayName: addr.displayName || undefined,
+        isDefault: addr.isDefault || false,
+        isPrimary: addr.isPrimary || false,
+      }));
+    } catch (error: unknown) {
+      const err = error as { code?: number; message?: string; status?: number };
+      console.error('[GmailService] Failed to fetch sendAs addresses:', err.message);
+      return [];
+    }
+  }
+
+  /**
    * Fetch the user's Gmail signature from their primary send-as address
    */
-  async getSignature(): Promise<string> {
-    if (this.cachedSignature !== null) {
+  async getSignature(fromEmail?: string): Promise<string> {
+    // Skip cache if requesting signature for a specific email
+    if (!fromEmail && this.cachedSignature !== null) {
       console.log('[GmailService] Using cached signature, length:', this.cachedSignature.length);
       return this.cachedSignature;
     }
@@ -26,19 +53,26 @@ export class GmailService {
         userId: 'me',
       });
 
-      // Find the primary (default) send-as address
+      // Find the target send-as address
       const sendAsAddresses = response.data.sendAs || [];
       console.log('[GmailService] Found', sendAsAddresses.length, 'send-as addresses');
-      const primary = sendAsAddresses.find(addr => addr.isDefault) || sendAsAddresses[0];
+      const targetAddress = fromEmail
+        ? sendAsAddresses.find(addr => addr.sendAsEmail === fromEmail)
+        : sendAsAddresses.find(addr => addr.isDefault) || sendAsAddresses[0];
 
-      if (primary?.signature) {
-        this.cachedSignature = primary.signature;
-        console.log('[GmailService] Fetched user signature, length:', primary.signature.length);
-        return primary.signature;
+      if (targetAddress?.signature) {
+        // Only cache if using default address
+        if (!fromEmail) {
+          this.cachedSignature = targetAddress.signature;
+        }
+        console.log('[GmailService] Fetched user signature, length:', targetAddress.signature.length);
+        return targetAddress.signature;
       }
 
-      console.log('[GmailService] No signature found in primary send-as address');
-      this.cachedSignature = '';
+      console.log('[GmailService] No signature found in target send-as address');
+      if (!fromEmail) {
+        this.cachedSignature = '';
+      }
       return '';
     } catch (error: unknown) {
       const err = error as { code?: number; message?: string; status?: number };
@@ -53,7 +87,9 @@ export class GmailService {
       }
 
       // Graceful fallback - don't break draft creation
-      this.cachedSignature = '';
+      if (!fromEmail) {
+        this.cachedSignature = '';
+      }
       return '';
     }
   }
@@ -100,8 +136,8 @@ export class GmailService {
     const mimeType = `image/${imageFormat}`;
     const filename = `screenshot.${imageFormat}`;
 
-    // Fetch user's Gmail signature
-    const signature = await this.getSignature();
+    // Fetch user's Gmail signature (for the selected sender alias if specified)
+    const signature = await this.getSignature(draft.fromEmail);
     console.log('[GmailService] Signature for draft:', signature ? `${signature.length} chars` : 'empty');
     const signatureHtml = signature ? `<br><br><div class="gmail_signature">${signature}</div>` : '';
 
@@ -138,7 +174,8 @@ export class GmailService {
       htmlBody,
       imageBuffer ?? undefined,
       imageBuffer ? filename : undefined,
-      mimeType
+      mimeType,
+      draft.fromEmail
     );
 
     try {
@@ -265,11 +302,15 @@ export class GmailService {
     htmlBody: string,
     imageBuffer?: Buffer,
     filename?: string,
-    imageMimeType: string = 'image/png'
+    imageMimeType: string = 'image/png',
+    fromEmail?: string
   ): string {
     const boundary = `boundary_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 
     const mimeLines: string[] = ['MIME-Version: 1.0'];
+    if (fromEmail) {
+      mimeLines.push(`From: ${fromEmail}`);
+    }
     if (to.trim()) {
       mimeLines.push(`To: ${to}`);
     }

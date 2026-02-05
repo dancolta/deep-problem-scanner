@@ -31,6 +31,7 @@ export const IPC_CHANNELS = {
   // Gmail
   GMAIL_CREATE_DRAFT: 'gmail:create-draft',
   GMAIL_SEND: 'gmail:send',
+  GMAIL_GET_SEND_AS: 'gmail:get-send-as',
 
   // Scheduler
   SCHEDULER_START: 'scheduler:start',

@@ -79,6 +79,7 @@ export interface AppSettings {
   scheduleEndHour: number;
   minIntervalMinutes?: number;  // Minimum interval between emails (default 10)
   maxIntervalMinutes?: number;  // Maximum interval between emails (default 20)
+  selectedSenderEmail?: string;  // Selected sender alias email
 }
 
 export interface EmailDraft {
@@ -88,6 +89,14 @@ export interface EmailDraft {
   screenshotDriveUrl: string;
   leadData: Lead;
   status: 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
+  fromEmail?: string;  // Optional sender alias
+}
+
+export interface SendAsAddress {
+  email: string;
+  displayName?: string;
+  isDefault: boolean;
+  isPrimary: boolean;
 }
 
 export interface SheetRow {

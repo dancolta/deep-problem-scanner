@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
+import { SendAsAddress } from '../../shared/types';
 import './SetupPage.css';
 
 interface SavedSettings {
@@ -9,6 +10,7 @@ interface SavedSettings {
   geminiApiKey?: string;
   pageSpeedApiKey?: string;
   customEmailTemplate?: string;
+  selectedSenderEmail?: string;
 }
 
 export default function SetupPage() {
@@ -31,12 +33,65 @@ export default function SetupPage() {
   const [sheetStatus, setSheetStatus] = useState<'untested' | 'testing' | 'connected' | 'error'>('untested');
   const [sheetError, setSheetError] = useState<string | null>(null);
 
+  // Sender alias state
+  const [senderAddresses, setSenderAddresses] = useState<SendAsAddress[]>([]);
+  const [selectedSender, setSelectedSender] = useState<string>('');
+  const [loadingSenders, setLoadingSenders] = useState(false);
+  const [senderSaveStatus, setSenderSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
 
   // Load settings and auth status on mount
   useEffect(() => {
     loadSettings();
     checkAuthStatus();
   }, []);
+
+  // Fetch sendAs addresses when authenticated
+  useEffect(() => {
+    if (authStatus === 'connected') {
+      fetchSenderAddresses();
+    }
+  }, [authStatus]);
+
+  async function fetchSenderAddresses() {
+    setLoadingSenders(true);
+    try {
+      const resp = await ipc<{ success: boolean; addresses?: SendAsAddress[] }>(IPC_CHANNELS.GMAIL_GET_SEND_AS);
+      if (resp?.success && resp.addresses) {
+        setSenderAddresses(resp.addresses);
+        // If no sender selected yet, set default
+        if (!selectedSender) {
+          const defaultAddr = resp.addresses.find(a => a.isDefault) ||
+                             resp.addresses.find(a => a.isPrimary) ||
+                             resp.addresses[0];
+          if (defaultAddr) {
+            setSelectedSender(defaultAddr.email);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch sendAs addresses:', err);
+    } finally {
+      setLoadingSenders(false);
+    }
+  }
+
+  async function handleSenderChange(email: string) {
+    setSelectedSender(email);
+    setSenderSaveStatus('saving');
+    try {
+      // Load current settings and update just the sender email
+      const result = await ipc<{ success: boolean; settings?: SavedSettings }>(IPC_CHANNELS.SETTINGS_GET);
+      const current = result?.settings || {};
+      await ipc(IPC_CHANNELS.SETTINGS_SET, {
+        ...current,
+        selectedSenderEmail: email,
+      });
+      setSenderSaveStatus('saved');
+      setTimeout(() => setSenderSaveStatus('idle'), 2000);
+    } catch {
+      setSenderSaveStatus('idle');
+    }
+  }
 
   // Parse sheet ID from URL
   useEffect(() => {
@@ -78,6 +133,9 @@ export default function SetupPage() {
         if (s.pageSpeedApiKey) {
           setPageSpeedApiKey(s.pageSpeedApiKey);
           setPageSpeedStatus('valid'); // Was saved previously, assume valid
+        }
+        if (s.selectedSenderEmail) {
+          setSelectedSender(s.selectedSenderEmail);
         }
       }
     } catch {
@@ -161,6 +219,7 @@ export default function SetupPage() {
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         geminiApiKey,
         pageSpeedApiKey,
+        selectedSenderEmail: selectedSender,
       });
       setSaveStatus('saved');
       setTimeout(() => setSaveStatus('idle'), 2000);
@@ -201,6 +260,37 @@ export default function SetupPage() {
           )}
           {authError && <p className="error-text">{authError}</p>}
         </div>
+
+        {/* Send From Email */}
+        {authStatus === 'connected' && (
+          <div className="setup-card">
+            <h3>Send From Email</h3>
+            <p className="hint-text" style={{ marginBottom: '10px' }}>
+              Select which email address to use when sending outreach emails.
+            </p>
+            <select
+              value={selectedSender}
+              onChange={(e) => handleSenderChange(e.target.value)}
+              className="select select--full"
+              disabled={loadingSenders}
+            >
+              {senderAddresses.length === 0 && (
+                <option value="">{loadingSenders ? 'Loading...' : 'No addresses found'}</option>
+              )}
+              {senderAddresses.map(addr => (
+                <option key={addr.email} value={addr.email}>
+                  {addr.displayName ? `${addr.displayName} <${addr.email}>` : addr.email}
+                  {addr.isDefault ? ' (default)' : ''}
+                </option>
+              ))}
+            </select>
+            {senderSaveStatus === 'saved' && (
+              <div className="sender-saved-banner">
+                Sender email updated
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Gemini API Key */}
         <div className="setup-card">
