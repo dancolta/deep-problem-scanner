@@ -4,28 +4,69 @@ A desktop application that scans websites for conversion issues, annotates scree
 
 ## Features
 
-- **Quick Scan** - Instantly scan any website URL without importing a list — perfect for one-off analyses
-- **Website Scanning** - Automatically scans websites using Playwright, measuring load times (LCP) and capturing viewport screenshots
-- **AI-Powered Analysis** - Uses Gemini Vision AI to detect conversion issues in hero sections (CTAs, headlines, trust signals, imagery)
-- **Annotated Screenshots** - Generates visually annotated screenshots highlighting specific problems with severity indicators
-- **Email Generation** - Creates personalized cold outreach emails based on scan findings with conversion impact data
-- **Google Workspace Integration** - Syncs with Google Sheets for lead management, Drive for screenshot storage, and Gmail for drafts
-- **Email Scheduling** - Schedule email sends with configurable intervals and time windows
+- **Quick Scan** - Instantly scan any website URL without importing a list
+- **Website Scanning** - Scans websites using Playwright, measuring load times and capturing screenshots
+- **AI-Powered Analysis** - Gemini Vision AI detects conversion issues (CTAs, headlines, trust signals)
+- **PageSpeed Integration** - Fetches real Google PageSpeed scores for performance metrics
+- **Annotated Screenshots** - Generates visual annotations highlighting specific problems
+- **Email Generation** - Creates personalized cold outreach emails based on scan findings
+- **Gmail Alias Support** - Send from any configured Gmail alias (sendAs address)
+- **Google Workspace Integration** - Syncs with Sheets, Drive, and Gmail
+- **Email Scheduling** - Schedule sends with random intervals and timezone-aware delivery
 
 ## Tech Stack
 
-- **Electron** - Cross-platform desktop application
-- **React + TypeScript** - Frontend UI
-- **Playwright** - Website scanning and screenshot capture
-- **Gemini Vision AI** - Screenshot analysis and issue detection
-- **Google APIs** - Sheets, Drive, Gmail integration
-- **Sharp** - Image processing and compression
+| Component | Technology |
+|-----------|------------|
+| Desktop App | Electron |
+| Frontend | React + TypeScript |
+| Browser Automation | Playwright (Chromium) |
+| AI Vision/Text | Google Gemini API |
+| Performance Scores | Google PageSpeed Insights API |
+| Image Processing | Sharp |
+| Google Services | OAuth2 + Drive/Gmail/Sheets APIs |
+
+## Architecture
+
+```
+┌─────────────┐     ┌──────────────┐     ┌─────────────┐
+│ Google      │────▶│ Lead Import  │────▶│ Playwright  │
+│ Sheets/CSV  │     │ & Validation │     │ Browser     │
+└─────────────┘     └──────────────┘     └──────┬──────┘
+                                                │
+                    ┌──────────────┐            │ Screenshot
+                    │ PageSpeed    │◀───────────┤
+                    │ API (scores) │            │
+                    └──────┬───────┘            ▼
+                           │            ┌─────────────┐
+                           │            │ Gemini      │
+                           │            │ Vision API  │
+                           │            └──────┬──────┘
+                           │                   │ Issues
+                           ▼                   ▼
+                    ┌──────────────────────────────┐
+                    │ Annotate Screenshot (Sharp)  │
+                    └──────────────┬───────────────┘
+                                   │
+                    ┌──────────────▼───────────────┐
+                    │ Google Drive (upload image)  │
+                    └──────────────┬───────────────┘
+                                   │
+                    ┌──────────────▼───────────────┐
+                    │ Gemini (generate email)      │
+                    └──────────────┬───────────────┘
+                                   │
+                    ┌──────────────▼───────────────┐
+                    │ Gmail (create draft)         │
+                    └──────────────────────────────┘
+```
 
 ## Prerequisites
 
 - Node.js 18+
 - Google Cloud project with OAuth 2.0 credentials
 - Gemini API key
+- PageSpeed Insights API key (optional, for performance scores)
 
 ## Installation
 
@@ -48,14 +89,10 @@ Create a `.env` file based on `.env.example`:
 ```env
 GOOGLE_CLIENT_ID=your_client_id
 GOOGLE_CLIENT_SECRET=your_client_secret
-GEMINI_API_KEY=your_gemini_api_key
 NODE_ENV=development
-MAX_CONCURRENT_SCANS=2
-SCREENSHOT_WIDTH=1440
-SCREENSHOT_HEIGHT=900
-PAGE_TIMEOUT=30000
-MAX_IMAGE_SIZE_KB=100
 ```
+
+> **Note:** Gemini API key and PageSpeed API key are configured in the app's Setup page, not in `.env`.
 
 ### Google Cloud Setup
 
@@ -64,8 +101,14 @@ MAX_IMAGE_SIZE_KB=100
    - Google Sheets API
    - Google Drive API
    - Gmail API
+   - PageSpeed Insights API (optional)
 3. Create OAuth 2.0 credentials (Desktop application)
 4. Add `http://localhost` to authorized redirect URIs
+5. Required OAuth scopes:
+   - `gmail.modify` - Create and send drafts
+   - `gmail.settings.basic` - Read signatures and sendAs addresses
+   - `drive.file` - Upload screenshots
+   - `spreadsheets` - Read/write lead data
 
 ## Usage
 
@@ -85,254 +128,146 @@ npm run package
 
 ## Workflow
 
-1. **Setup** - Configure Google authentication and Gemini API key
-2. **Upload** - Import leads from CSV, Google Sheets, or use Quick Scan for single URLs
-3. **Scan** - The app scans each website, capturing screenshots and running diagnostics
-4. **Review** - AI analyzes hero sections and annotates screenshots with conversion issues
-5. **Drafts** - Review and approve AI-generated personalized emails
-6. **Schedule** - Set send intervals and time windows for approved emails
+1. **Setup** - Connect Google account, configure API keys, select sender email alias
+2. **Upload** - Import leads from Google Sheets, CSV, or use Quick Scan for single URLs
+3. **Scan** - App opens each website, captures screenshot, runs AI analysis
+4. **Annotate** - Issues are highlighted on screenshot with explanation cards
+5. **Email** - AI generates personalized email, draft created in Gmail
+6. **Schedule** - Set send times with random intervals in lead's timezone
 
-### Quick Scan vs List Import
+## Setup Page Configuration
+
+| Setting | Description |
+|---------|-------------|
+| Google Account | OAuth connection for Sheets/Drive/Gmail |
+| Send From Email | Select which Gmail alias to use for outreach |
+| Gemini API Key | For AI vision analysis and email generation |
+| PageSpeed API Key | For real performance/accessibility scores |
+| Google Sheet URL | Output sheet for scan results |
+
+## Quick Scan vs List Import
 
 | Feature | Quick Scan | List Import |
 |---------|------------|-------------|
 | Input | Single URL | CSV or Google Sheets |
-| Contact Info | Not required | Required for emails |
-| Gmail Draft | Not created | Created automatically |
+| Contact Info | Optional | Required for emails |
+| Gmail Draft | Only if email provided | Created automatically |
 | Best For | Quick website audits | Outreach campaigns |
-| Drafts Badge | "NOT FROM LIST" (red) | Normal status badge |
-
-## Quick Scan
-
-Quick Scan allows you to instantly analyze any website without importing a lead list. This is useful for:
-
-- Quick website audits before sales calls
-- Checking competitors' landing pages
-- Testing the scanner on specific URLs
-- Generating analysis reports without contact info
-
-### How to Use Quick Scan
-
-1. Navigate to the **Upload** page
-2. Select the **Quick Scan** tab
-3. Enter a website URL (required)
-4. Optionally add:
-   - **Company Name** — Defaults to the domain if not provided
-   - **Contact Name** — For personalized email greeting
-   - **Contact Email** — Enables Gmail draft creation
-5. Click **Scan Website**
-
-### Quick Scan Behavior
-
-| With Contact Email | Without Contact Email |
-|-------------------|----------------------|
-| Gmail draft created | No draft created |
-| Normal status badge | Red "NOT FROM LIST" badge |
-| Full email workflow | Use "Copy Draft" button |
-
-- **Results always saved to Google Sheets** — All scans are recorded regardless of contact info
-- **Automatic source detection** — Adding contact email treats it as a list import
-
----
 
 ## Lead Import Format
 
 ### Google Sheets (Recommended)
 
-Import leads directly from Google Sheets. The app recognizes flexible column headers:
+The app recognizes flexible column headers:
 
 | Field | Recognized Headers |
 |-------|-------------------|
-| Company Name | `Company`, `Company Name`, `Business`, `Organization`, `Account` |
+| Company Name | `Company`, `Company Name`, `Business`, `Organization`, `Company Name - Cleaned` |
 | Website URL | `Website`, `URL`, `Site`, `Domain`, `Homepage` |
-| Contact Email | `Email`, `Contact Email`, `Mail`, `Email Address` |
-| Contact Name | `Name`, `Contact Name`, `Full Name`, `Contact` |
+| Contact Email | `Email`, `Contact Email`, `Primary Email`, `Email 1`, `Work Email` |
+| Contact Name | `Name`, `Contact Name`, `Full Name`, `Contact Full Name` |
 | First Name | `First Name`, `First` |
 | Last Name | `Last Name`, `Last`, `Surname` |
+| Processed | `Done`, `Processed`, `Completed`, `Sent`, `Emailed` |
 
-> **Note:** If `Contact Name` is not provided, the app will combine `First Name` + `Last Name` automatically.
-
-### Example Sheet Structure
-
-| Done | First Name | Last Name | Company Name | Website | Email |
-|------|------------|-----------|--------------|---------|-------|
-| ☐ | John | Smith | Acme Inc | acme.com | john@acme.com |
-| ☑ | Jane | Doe | Beta Corp | beta.io | jane@beta.io |
-| ☐ | Bob | Wilson | Gamma LLC | gamma.co | bob@gamma.co |
+> **Note:** If `Contact Name` is not provided, the app combines `First Name` + `Last Name` automatically.
 
 ### Processed/Done Column
 
-Add a **checkbox column** (recommended name: `Done` or `Processed`) to track which leads have been emailed:
+Add a **checkbox column** to track which leads have been emailed:
 
-- **On Import**: Rows with checkbox checked (TRUE) are skipped and shown as "Already processed"
-- **After Scan**: The app automatically marks the checkbox TRUE for successfully scanned leads
-- **Benefit**: Prevents duplicate emails when re-importing the same lead list
-
-Recognized header names: `Done`, `Processed`, `Completed`, `Sent`, `Emailed`
-
-### CSV Import
-
-CSV files follow the same column format. Headers are matched case-insensitively.
+- **On Import**: Rows with checkbox checked are skipped
+- **After Scan**: App automatically marks checkbox TRUE for scanned leads
+- **Benefit**: Prevents duplicate emails when re-importing
 
 ## Project Structure
 
 ```
-├── electron/           # Electron main process files
+├── electron/              # Electron main process
+│   ├── main.ts           # App entry point
+│   ├── ipc-handlers.ts   # IPC request handlers
+│   └── service-registry.ts
 ├── src/
-│   ├── renderer/       # React frontend
-│   │   ├── pages/      # App pages (Setup, Upload, Scan, Drafts, Schedule)
-│   │   ├── components/ # Reusable components
-│   │   └── context/    # React context providers
-│   ├── services/       # Backend services
-│   │   ├── annotation/ # AI screenshot annotation
-│   │   ├── email/      # Email generation
-│   │   ├── google/     # Google APIs integration
-│   │   ├── scanner/    # Playwright website scanner
-│   │   └── scheduler/  # Email scheduling
-│   ├── shared/         # Shared types and IPC channels
-│   └── utils/          # Utility functions
-└── tests/              # Test files
+│   ├── renderer/         # React frontend
+│   │   ├── pages/        # Setup, Upload, Scan, Drafts, Schedule
+│   │   └── hooks/        # Custom React hooks
+│   ├── services/
+│   │   ├── annotation/   # Gemini vision + Sharp drawing
+│   │   ├── email/        # Email generation with templates
+│   │   ├── google/       # Drive, Gmail, Sheets services
+│   │   ├── scanner/      # Playwright browser automation
+│   │   ├── scheduler/    # Email scheduling logic
+│   │   └── pagespeed/    # PageSpeed Insights integration
+│   └── shared/           # Types and IPC channels
+└── dist/                 # Compiled output
 ```
-
-## Diagnostics
-
-The scanner runs the following checks:
-
-| Check | Description |
-|-------|-------------|
-| Page Speed | Measures Largest Contentful Paint (LCP) |
-| Mobile Responsive | Viewport meta tag detection |
-| HTTPS | Secure connection verification |
-| No Broken Images | Image loading validation |
-| Structured Data | JSON-LD/schema.org detection |
 
 ## AI Analysis
 
-Gemini Vision analyzes hero sections for:
+Gemini Vision analyzes screenshots for:
 
-- **CTA Issues** - Missing, vague, or low-contrast call-to-action buttons
-- **Headline Problems** - Unclear value propositions or missing H1/subheadline
-- **Trust Signals** - Missing social proof, logos, or testimonials
-- **Hero Image** - Generic stock photos or missing visual content
+| Issue Type | Description |
+|------------|-------------|
+| Unclear Value Proposition | Missing or vague headline/subheadline |
+| Weak CTA | Missing, vague, or low-contrast call-to-action |
+| Missing Trust Signals | No social proof, logos, or testimonials |
+| Poor Visual Hierarchy | Cluttered layout or competing elements |
+
+## Email Scheduling
+
+The scheduler supports:
+
+- **Random intervals** - 10-20 minute gaps between emails (configurable)
+- **Business hours** - Only sends during configured window (e.g., 9 AM - 5 PM)
+- **Timezone-aware** - Sends based on lead's local time
+- **Sender alias** - Emails sent from selected Gmail alias
+
+## Services Overview
+
+| Service | File | Purpose |
+|---------|------|---------|
+| PlaywrightScanner | `scanner/playwright-scanner.ts` | Opens websites, captures screenshots |
+| GeminiVision | `annotation/gemini-vision.ts` | Analyzes screenshots for issues |
+| Drawing | `annotation/drawing.ts` | Annotates screenshots with Sharp |
+| GmailService | `google/gmail.ts` | Creates drafts, fetches signatures/aliases |
+| DriveService | `google/drive.ts` | Uploads screenshots |
+| SheetsService | `google/sheets.ts` | Reads/writes scan results |
+| SheetsLeadImporter | `google/sheets-lead-importer.ts` | Imports leads from Google Sheets |
+| EmailGenerator | `email/email-generator.ts` | Generates personalized emails |
+| PageSpeedService | `pagespeed/pagespeed-service.ts` | Fetches performance scores |
+| Scheduler | `scheduler/scheduler.ts` | Manages email send timing |
 
 <details>
-<summary><strong>Email Generation</strong> (click to expand)</summary>
+<summary><strong>Email Generation Details</strong> (click to expand)</summary>
 
 ### Prompt Structure
 
-The AI email generation uses a structured prompt with the following components:
+The AI email generation uses a structured prompt with:
 
-```
-RECIPIENT:
-- First name, Company, Domain
-
-SCAN FINDINGS:
-- Intro metric (poorest PageSpeed score below threshold)
-- Number of issues found
-- Most critical issue
-- Full diagnostics summary
-
-EMAIL PATTERN:
-Subject: [3-7 words, reference their main problem]
-
-Hi {{firstName}},
-
-{{introHook}}
-
-[TRANSITION_SENTENCE]
-[IMAGE]
-
-{{cta}}
-```
-
-### Subject Line Formulas
-
-Pick one based on available data:
-
-**Formula 1: Problem + Metric** (when you have specific numbers)
-```
-your site takes 4.3 seconds to load
-homepage loads in 4.3 seconds
-homepage is 4.3 seconds slow
-```
-
-**Formula 2: Problem + Impact** (emphasize business cost)
-```
-your homepage might be losing conversions
-losing 25% of visitors before they convert
-hero section could be costing you leads
-```
-
-**Formula 3: Just the Metric** (maximum curiosity)
-```
-4.3 seconds
-25% visitor drop
-47 http requests
-```
-
-**Formula 4: Casual Observation** (fallback when no metric)
-```
-noticed a few issues on your site
-quick thing about your homepage
-saw something on your site
-```
+- Recipient info (name, company, domain)
+- PageSpeed scores (performance, accessibility, SEO, best practices)
+- Detected issues from Gemini Vision
+- Screenshot URL for inline embedding
 
 ### Subject Line Rules
 
 - ALL LOWERCASE (no caps except proper nouns)
-- NO PUNCTUATION (no periods, exclamation marks, question marks)
+- NO PUNCTUATION
 - 3-7 words maximum
-- NO clickbait ("you won't believe", "shocking")
-- NO salesy words ("free", "opportunity", "limited time")
+- Reference their specific problem
 
 ### Body Rules
 
-| # | Rule |
-|---|------|
-| 1 | Body: 75-100 words max (under 80 ideal). Be concise. |
-| 2 | First sentence MUST follow the intro hook pattern provided |
-| 3 | First sentence MUST include the impact statement if a metric is provided |
-| 4 | NO em dashes. Use commas instead. |
-| 5 | Second paragraph: Output exactly "[TRANSITION_SENTENCE]" placeholder |
-| 6 | CTA MUST match the provided CTA exactly |
-| 7 | NO signature - Gmail will add it automatically |
-| 8 | Tone: Direct, expert, helpful |
-| 9 | NO: ROI claims, pricing, buzzwords, "hope this finds you well" |
-| 10 | NEVER use "hero" or "hero section" in the OPENING sentence |
-
-### Spacing Rules
-
-- After `[TRANSITION_SENTENCE]` → single newline → `[IMAGE]` (NO blank line)
-- After `[IMAGE]` → blank line → CTA (one blank line after image)
+- 75-100 words max
+- Direct, expert, helpful tone
+- Includes `[IMAGE]` placeholder for screenshot
+- No signature (Gmail adds automatically)
 
 ### CTA Rotation
 
-Emails alternate between two CTAs based on email index:
-
-| Email # | CTA |
-|---------|-----|
-| 1st, 3rd, 5th... | "Want me to walk you through the rest of the findings? Takes 15 minutes." |
-| 2nd, 4th, 6th... | "Worth a 15-min call to see if the other issues are worth fixing?" |
-
-### Buzzword Blacklist
-
-The following words are automatically filtered from the opening paragraph:
-
-| Pattern | Replacement |
-|---------|-------------|
-| "hero section" | "above-the-fold area" |
-| "hero" | "header" |
-
-### Industry Thresholds
-
-PageSpeed metrics below these thresholds are flagged in outreach:
-
-| Metric | Threshold |
-|--------|-----------|
-| Performance Score | 80 |
-| Accessibility Score | 80 |
-| SEO Score | 80 |
-| Best Practices Score | 80 |
+Emails alternate between CTAs for variety:
+- "Want me to walk you through the rest of the findings?"
+- "Worth a 15-min call to see if the other issues are worth fixing?"
 
 </details>
 
@@ -342,4 +277,4 @@ UNLICENSED - Private repository
 
 ## Author
 
-[NodeSparks](https://github.com/NodeSparks)
+[NodeSparks](https://nodesparks.com)

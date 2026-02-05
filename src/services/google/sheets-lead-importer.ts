@@ -9,16 +9,18 @@ const LEAD_COLUMN_VARIANTS: Record<string, string[]> = {
   ],
   company_name: [
     'company_name', 'company', 'companyname', 'business', 'business_name',
-    'company_name_for_emails', 'organization', 'org', 'client', 'account'
+    'company_name_for_emails', 'company_name_-_cleaned', 'organization', 'org', 'client', 'account'
   ],
   website_url: [
     'website_url', 'website', 'url', 'site', 'web', 'homepage', 'domain'
   ],
   contact_name: [
-    'contact_name', 'name', 'contactname', 'contact', 'full_name', 'fullname'
+    'contact_name', 'name', 'contactname', 'contact', 'full_name', 'fullname',
+    'contact_full_name'
   ],
   contact_email: [
-    'contact_email', 'email', 'contactemail', 'mail', 'email_address'
+    'contact_email', 'email', 'contactemail', 'mail', 'email_address',
+    'primary_email', 'email_1', 'work_email', 'business_email'
   ],
   first_name: [
     'first_name', 'firstname', 'first'
