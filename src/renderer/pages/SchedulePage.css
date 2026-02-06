@@ -320,9 +320,9 @@
 .queue-table-wrapper {
   background: var(--bg-elevated);
   border-radius: var(--radius-xl);
-  overflow: hidden;
   margin-bottom: 20px;
   max-height: 400px;
+  overflow-x: auto;
   overflow-y: auto;
   box-shadow: var(--shadow-card);
 }
@@ -333,10 +333,15 @@
   font-size: 0.95rem;
   color: var(--text-primary);
   border-bottom: 1px solid var(--border-subtle);
+  position: sticky;
+  top: 0;
+  background: var(--bg-elevated);
+  z-index: 2;
 }
 
 .queue-table {
   width: 100%;
+  min-width: 900px; /* Ensure table doesn't shrink too much on mobile */
   border-collapse: collapse;
   font-size: 0.82rem;
 }
