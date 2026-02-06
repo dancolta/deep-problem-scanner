@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useIpcInvoke } from '../hooks/useIpc';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { SheetRow, AppSettings } from '../../shared/types';
+import EmptyState from '../components/EmptyState';
 import './SchedulePage.css';
 
 interface LogEntry {
@@ -40,7 +42,7 @@ function isValidScheduleRow(row: SheetRow): boolean {
 
 /**
  * Format a date/time string for display in a specific timezone.
- * Returns formatted string like "Feb 15, 2:00 PM" with timezone abbreviation.
+ * Returns formatted string like "Feb 5, 2026, 2:00 PM" (unambiguous format).
  * Handles format: "2026-02-06 13:00 (Los Angeles)|ISO:2026-02-06T21:00:00.000Z"
  */
 function formatTimeInTimezone(dateStr: string | undefined, tz: string): string {
@@ -57,6 +59,7 @@ function formatTimeInTimezone(dateStr: string | undefined, tz: string): string {
       timeZone: tz,
       month: 'short',
       day: 'numeric',
+      year: 'numeric',
       hour: 'numeric',
       minute: '2-digit',
       hour12: true,
@@ -85,6 +88,7 @@ function getTimezoneAbbr(tz: string): string {
 }
 
 export default function SchedulePage() {
+  const navigate = useNavigate();
   const [emails, setEmails] = useState<SheetRow[]>([]);
   const [schedulerStatus, setSchedulerStatus] = useState<SchedulerState>('idle');
   const [activityLog, setActivityLog] = useState<LogEntry[]>([]);
@@ -358,20 +362,23 @@ export default function SchedulePage() {
 
       {/* Controls */}
       <div className="schedule-controls">
-        <button
-          className="btn btn-start"
-          onClick={handleStart}
-          disabled={schedulerStatus === 'running' || startLoading}
-        >
-          {startLoading ? 'Starting...' : 'Start Sending'}
-        </button>
-        <button
-          className="btn btn-stop"
-          onClick={handleStop}
-          disabled={schedulerStatus !== 'running' || stopLoading}
-        >
-          {stopLoading ? 'Stopping...' : 'Stop Sending'}
-        </button>
+        {schedulerStatus !== 'running' ? (
+          <button
+            className="btn-primary"
+            onClick={handleStart}
+            disabled={startLoading}
+          >
+            {startLoading ? 'Starting...' : 'Start Sending'}
+          </button>
+        ) : (
+          <button
+            className="btn-destructive"
+            onClick={handleStop}
+            disabled={stopLoading}
+          >
+            {stopLoading ? 'Stopping...' : 'Stop Sending'}
+          </button>
+        )}
 
         <div className="status-indicator">
           <span className={`status-dot ${schedulerStatus}`} />
@@ -383,7 +390,7 @@ export default function SchedulePage() {
         </span>
 
         <button
-          className="btn btn-refresh"
+          className="btn-secondary"
           onClick={async () => {
             setSyncing(true);
             setSyncMessage(null);
@@ -431,7 +438,13 @@ export default function SchedulePage() {
       <div className="queue-table-wrapper">
         <h3>Email Queue</h3>
         {emails.length === 0 ? (
-          <div className="empty-state">No emails loaded. Check settings and refresh.</div>
+          <EmptyState
+            icon="📅"
+            heading="Queue is empty"
+            description="Approved drafts will appear here for scheduling. Run a scan and review drafts to populate the queue."
+            actionLabel="View Drafts"
+            onAction={() => navigate('/drafts')}
+          />
         ) : (
           <table className="queue-table">
             <thead>
@@ -486,7 +499,10 @@ export default function SchedulePage() {
         <h3>Activity Log</h3>
         <div className="activity-log-entries">
           {activityLog.length === 0 && (
-            <div className="empty-state">No activity yet.</div>
+            <div className="activity-empty-state">
+              <span className="activity-empty-icon">📋</span>
+              <span>No activity yet. Sent emails and delivery status will appear here.</span>
+            </div>
           )}
           {activityLog.map((entry, i) => (
             <div className="log-entry" key={i}>

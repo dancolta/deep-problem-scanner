@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useScan } from '../context/ScanContext';
 import type { ScanResult } from '../../shared/types';
+import EmptyState from '../components/EmptyState';
 import './ScanPage.css';
 
 export default function ScanPage() {
@@ -40,16 +41,17 @@ export default function ScanPage() {
     return (
       <div className="scan-page">
         <div className="scan-header">
-          <h2>No Scan Running</h2>
-          <p style={{ color: '#888', marginTop: '1rem' }}>
-            Upload a CSV and start a scan from the Upload page.
-          </p>
-          <div className="control-bar">
-            <button className="btn-drafts" onClick={() => navigate('/upload')}>
-              Go to Upload
-            </button>
-          </div>
+          <h2>Scan</h2>
+          <p className="page-subtitle">Monitor the scanning progress of your leads.</p>
         </div>
+        <EmptyState
+          icon="🔍"
+          heading="Ready to scan"
+          description="Import leads from Google Sheets on the Upload page to start scanning websites and generating personalized outreach emails."
+          actionLabel="Go to Upload"
+          onAction={() => navigate('/upload')}
+          tip="Tip: Make sure your Google Sheet has the required columns: company_name, website_url, contact_name, and contact_email."
+        />
       </div>
     );
   }
@@ -128,11 +130,11 @@ export default function ScanPage() {
       {/* Control Bar */}
       <div className="control-bar">
         {isScanning ? (
-          <button className="btn-cancel" onClick={cancelScan}>
-            Cancel Scan
+          <button className="btn-destructive" onClick={cancelScan}>
+            Stop Scan
           </button>
         ) : (
-          <button className="btn-drafts" onClick={() => navigate('/drafts')}>
+          <button className="btn-primary" onClick={() => navigate('/drafts')}>
             View Drafts
           </button>
         )}

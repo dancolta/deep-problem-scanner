@@ -217,33 +217,19 @@
   border-top: 1px solid var(--border-subtle);
 }
 
-.btn-cancel {
-  background: var(--danger);
-  color: #fff;
-  border: none;
-  padding: 10px 28px;
-  border-radius: var(--radius-lg);
+/* Page subtitle */
+.scan-page .page-subtitle {
+  color: var(--text-secondary);
   font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
+  margin-top: 8px;
 }
 
-.btn-cancel:hover { opacity: 0.85; }
-
-.btn-drafts {
-  background: var(--success);
-  color: #fff;
-  border: none;
+/* Control bar buttons use global btn-primary/btn-destructive classes */
+.control-bar .btn-primary,
+.control-bar .btn-destructive {
   padding: 10px 28px;
-  border-radius: var(--radius-lg);
   font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
 }
-
-.btn-drafts:hover { opacity: 0.85; }
 
 /* ============================================
    RESPONSIVE BREAKPOINTS
@@ -303,8 +289,8 @@
     gap: var(--space-2);
   }
 
-  .btn-cancel,
-  .btn-drafts {
+  .control-bar .btn-primary,
+  .control-bar .btn-destructive {
     width: 100%;
   }
 }

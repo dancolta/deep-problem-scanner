@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { Lead, ScanSource } from '../../shared/types';
 import { useScan } from '../context/ScanContext';
+import EmptyState from '../components/EmptyState';
 import './UploadPage.css';
 
 type ImportSource = 'quick' | 'sheets' | 'csv';
@@ -452,7 +453,7 @@ export default function UploadPage() {
             <div className="banner banner--error" style={{ marginTop: '12px' }}>{quickScanError}</div>
           )}
           <button
-            className="btn btn--primary"
+            className="btn-primary"
             onClick={handleQuickScan}
             disabled={!quickScanUrl.trim()}
             style={{ marginTop: '16px' }}
@@ -500,7 +501,7 @@ export default function UploadPage() {
 
       {importSource === 'sheets' && (
         <div className="sheets-import-section">
-          <div className="sheets-input-row">
+          <div className="upload-input-row">
             <input
               type="text"
               value={sheetsUrl}
@@ -513,25 +514,13 @@ export default function UploadPage() {
               className="input input--full"
               disabled={sheetsStatus === 'importing'}
             />
-          </div>
-
-          <div className="sheets-actions">
             <button
-              className="btn btn--primary"
+              className="btn-primary"
               onClick={handleImportFromSheets}
               disabled={!isValidSheetsUrl || sheetsStatus === 'importing'}
             >
-              {sheetsStatus === 'importing' ? 'Importing...' : 'Import Leads'}
+              {sheetsStatus === 'importing' ? 'Importing...' : 'Import'}
             </button>
-
-            {sheetsStatus === 'connected' && (
-              <button
-                className="btn btn--outline"
-                onClick={handleRefreshFromSheets}
-              >
-                Refresh from Sheet
-              </button>
-            )}
           </div>
 
           {/* Connection status */}
@@ -539,6 +528,12 @@ export default function UploadPage() {
             <div className="sheets-status sheets-status--connected">
               <span className="status-dot status-dot--green"></span>
               <span>Connected to "{sheetName}"</span>
+              <button
+                className="btn-secondary btn-sm"
+                onClick={handleRefreshFromSheets}
+              >
+                Refresh
+              </button>
             </div>
           )}
 
@@ -549,9 +544,26 @@ export default function UploadPage() {
       )}
 
       {parseError && <div className="banner banner--error">{parseError}</div>}
-      {parseResult && (
+      {parseResult && parseResult.leads.length > 0 && (
         <div className="banner banner--success">
           Found {parseResult.totalParsed} leads &mdash; {parseResult.leads.length} ready to scan
+        </div>
+      )}
+
+      {/* Empty state when sheets connected but no leads */}
+      {importSource === 'sheets' && sheetsStatus === 'connected' && parseResult && parseResult.leads.length === 0 && (
+        <EmptyState
+          icon="📋"
+          heading="No leads found"
+          description="The Google Sheet was imported but no valid leads were found. Make sure your sheet has the required columns: company_name, website_url, contact_name, and contact_email."
+          tip="Check that leads aren't already marked as processed in your sheet."
+        />
+      )}
+
+      {/* Empty state when sheets not yet connected */}
+      {importSource === 'sheets' && sheetsStatus === 'idle' && !parseResult && (
+        <div className="sheets-empty-hint">
+          <p>No leads imported yet. Paste a Google Sheets URL above and click Import.</p>
         </div>
       )}
 
@@ -741,22 +753,34 @@ export default function UploadPage() {
         </div>
       )}
 
-      <div className="action-buttons">
-        <button className="btn btn--outline" onClick={handleClear} disabled={!file && !parseResult}>
-          Clear
-        </button>
-        <button
-          className="btn btn--primary btn--large"
-          onClick={handleStartScan}
-          disabled={!parseResult || getLeadsToScan().length === 0 || needsClearance}
-          title={needsClearance ? 'Clear flagged leads before scanning' : undefined}
-        >
-          {needsClearance
-            ? `Clear List First (${parseResult?.invalidLeads.length} flagged)`
-            : `Start Scan (${getLeadsToScan().length} leads)`
-          }
-        </button>
-      </div>
+      {/* Action bar with lead count */}
+      {(parseResult || file) && (
+        <div className="upload-action-bar">
+          <span className="upload-lead-count">
+            {parseResult ? (
+              <span className="mono">{getLeadsToScan().length}</span>
+            ) : (
+              <span className="mono">0</span>
+            )} leads imported
+          </span>
+          <div className="action-buttons">
+            <button className="btn-secondary" onClick={handleClear} disabled={!file && !parseResult}>
+              Clear
+            </button>
+            <button
+              className="btn-primary"
+              onClick={handleStartScan}
+              disabled={!parseResult || getLeadsToScan().length === 0 || needsClearance}
+              title={needsClearance ? 'Clear flagged leads before scanning' : undefined}
+            >
+              {needsClearance
+                ? `Clear List First (${parseResult?.invalidLeads.length} flagged)`
+                : 'Start Scan'
+              }
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

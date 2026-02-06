@@ -78,11 +78,7 @@
   opacity: 0.85;
 }
 
-.btn-schedule {
-  background: var(--accent-primary);
-  color: #fff;
-  border-radius: var(--radius-lg);
-}
+/* Bulk actions use global btn-primary and btn-secondary classes */
 
 /* Draft Cards */
 .drafts-list {
@@ -274,17 +270,7 @@
   font-size: 0.8rem;
 }
 
-.btn-save {
-  background: var(--success);
-  color: #fff;
-  border-radius: var(--radius-sm);
-}
-
-.btn-cancel {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-  border-radius: var(--radius-sm);
-}
+/* Edit actions use global btn-primary and btn-secondary classes */
 
 /* Loading / Error */
 .drafts-loading,

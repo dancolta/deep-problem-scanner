@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { SendAsAddress } from '../../shared/types';
 import './SetupPage.css';
@@ -38,6 +38,30 @@ export default function SetupPage() {
   const [selectedSender, setSelectedSender] = useState<string>('');
   const [loadingSenders, setLoadingSenders] = useState(false);
   const [senderSaveStatus, setSenderSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  // Completion tracking for section badges
+  const authCompletion = useMemo(() => {
+    const total = 2; // Google Account + Send From Email
+    let completed = 0;
+    if (authStatus === 'connected') completed++;
+    if (selectedSender) completed++;
+    return { completed, total };
+  }, [authStatus, selectedSender]);
+
+  const apiKeysCompletion = useMemo(() => {
+    const total = 2; // Gemini + PageSpeed
+    let completed = 0;
+    if (geminiStatus === 'valid') completed++;
+    if (pageSpeedStatus === 'valid') completed++;
+    return { completed, total };
+  }, [geminiStatus, pageSpeedStatus]);
+
+  const dataSourceCompletion = useMemo(() => {
+    const total = 1; // Google Sheet
+    let completed = 0;
+    if (sheetStatus === 'connected') completed++;
+    return { completed, total };
+  }, [sheetStatus]);
 
   // Load settings and auth status on mount
   useEffect(() => {
@@ -235,6 +259,14 @@ export default function SetupPage() {
       <p>Connect your Google account and configure settings.</p>
 
       <div className="setup-cards">
+        {/* AUTHENTICATION Section */}
+        <div className="setup-section-header">
+          <span>AUTHENTICATION</span>
+          <span className={`completion-badge ${authCompletion.completed === authCompletion.total ? 'completion-badge--complete' : 'completion-badge--incomplete'}`}>
+            {authCompletion.completed}/{authCompletion.total} configured
+          </span>
+        </div>
+
         {/* Google Account Connection */}
         <div className="setup-card">
           <h3>Google Account</h3>
@@ -249,12 +281,12 @@ export default function SetupPage() {
             </span>
           </div>
           {authStatus === 'disconnected' && (
-            <button className="btn btn--primary" onClick={handleConnect} disabled={authLoading}>
+            <button className="btn-primary" onClick={handleConnect} disabled={authLoading}>
               {authLoading ? 'Connecting...' : 'Connect Google Account'}
             </button>
           )}
           {authStatus === 'connected' && (
-            <button className="btn btn--outline" onClick={handleDisconnect}>
+            <button className="btn-destructive" onClick={handleDisconnect}>
               Disconnect
             </button>
           )}
@@ -292,6 +324,14 @@ export default function SetupPage() {
           </div>
         )}
 
+        {/* API KEYS Section */}
+        <div className="setup-section-header">
+          <span>API KEYS</span>
+          <span className={`completion-badge ${apiKeysCompletion.completed === apiKeysCompletion.total ? 'completion-badge--complete' : 'completion-badge--incomplete'}`}>
+            {apiKeysCompletion.completed}/{apiKeysCompletion.total} configured
+          </span>
+        </div>
+
         {/* Gemini API Key */}
         <div className="setup-card">
           <h3>Gemini API Key</h3>
@@ -303,11 +343,11 @@ export default function SetupPage() {
               placeholder="AIza..."
               className="input"
             />
-            <button className="btn btn--icon" onClick={() => setShowApiKey(!showApiKey)}>
+            <button className="btn-secondary" onClick={() => setShowApiKey(!showApiKey)}>
               {showApiKey ? 'Hide' : 'Show'}
             </button>
             <button
-              className="btn btn--outline"
+              className="btn-secondary"
               onClick={handleTestGemini}
               disabled={!geminiApiKey || geminiStatus === 'testing'}
             >
@@ -342,11 +382,11 @@ export default function SetupPage() {
               placeholder="AIza..."
               className="input"
             />
-            <button className="btn btn--icon" onClick={() => setShowPageSpeedKey(!showPageSpeedKey)}>
+            <button className="btn-secondary" onClick={() => setShowPageSpeedKey(!showPageSpeedKey)}>
               {showPageSpeedKey ? 'Hide' : 'Show'}
             </button>
             <button
-              className="btn btn--outline"
+              className="btn-secondary"
               onClick={handleTestPageSpeed}
               disabled={!pageSpeedApiKey || pageSpeedStatus === 'testing'}
             >
@@ -370,6 +410,14 @@ export default function SetupPage() {
           </p>
         </div>
 
+        {/* DATA SOURCE Section */}
+        <div className="setup-section-header">
+          <span>DATA SOURCE</span>
+          <span className={`completion-badge ${dataSourceCompletion.completed === dataSourceCompletion.total ? 'completion-badge--complete' : 'completion-badge--incomplete'}`}>
+            {dataSourceCompletion.completed}/{dataSourceCompletion.total} configured
+          </span>
+        </div>
+
         {/* Google Sheet URL */}
         <div className="setup-card">
           <h3>Google Sheet URL</h3>
@@ -383,7 +431,7 @@ export default function SetupPage() {
               style={{ flex: 1 }}
             />
             <button
-              className="btn btn--outline"
+              className="btn-secondary"
               onClick={handleTestSheet}
               disabled={!sheetId || sheetStatus === 'testing' || authStatus !== 'connected'}
             >
@@ -431,7 +479,7 @@ export default function SetupPage() {
       </div>
 
       {/* Save Button */}
-      <button className="btn btn--primary btn--large" onClick={handleSave} disabled={saveStatus === 'saving'}>
+      <button className="btn-primary btn-lg" onClick={handleSave} disabled={saveStatus === 'saving'}>
         {saveStatus === 'saving'
           ? 'Saving...'
           : saveStatus === 'saved'

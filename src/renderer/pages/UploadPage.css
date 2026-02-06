@@ -301,12 +301,32 @@
   color: var(--warning);
 }
 
+/* Action Bar */
+.upload-action-bar {
+  border-top: 1px solid var(--border-subtle);
+  padding-top: 16px;
+  margin-top: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.upload-lead-count {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.upload-lead-count .mono {
+  font-family: var(--font-mono);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
 /* Action Buttons */
 .action-buttons {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
-  margin-top: 4px;
 }
 
 .btn {
@@ -387,6 +407,17 @@
   margin-top: 8px;
 }
 
+/* Input row with inline button */
+.upload-input-row {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.upload-input-row input {
+  flex: 1;
+}
+
 .sheets-input-row {
   margin-bottom: 16px;
 }
@@ -434,6 +465,25 @@
 .sheets-status--connected {
   background: var(--success-subtle);
   color: var(--success-text);
+  justify-content: flex-start;
+}
+
+.sheets-status--connected .btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+  margin-left: auto;
+}
+
+/* Empty hint for sheets */
+.sheets-empty-hint {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-tertiary);
+  font-size: 14px;
+}
+
+.sheets-empty-hint p {
+  color: var(--text-tertiary);
 }
 
 .sheets-status .status-dot {

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import type { SheetRow, AppSettings, ScanSource } from '../../shared/types';
+import EmptyState from '../components/EmptyState';
 import './DraftsPage.css';
 
 type DraftStatus = 'draft' | 'approved' | 'rejected' | 'scheduled' | 'sent' | 'failed';
@@ -234,7 +235,7 @@ export default function DraftsPage() {
     return (
       <div className="drafts-page">
         <div className="drafts-error">Error: {error}</div>
-        <button className="btn-sync" onClick={handleSync} disabled={syncing} style={{ marginTop: '1rem' }}>
+        <button className="btn-primary" onClick={handleSync} disabled={syncing} style={{ marginTop: '1rem' }}>
           {syncing ? 'Syncing...' : 'Retry Sync'}
         </button>
       </div>
@@ -263,10 +264,10 @@ export default function DraftsPage() {
           Showing {filtered.length} of {drafts.length} drafts
         </span>
         <div className="drafts-bulk-actions">
-          <button className="btn-sync" onClick={handleSync} disabled={syncing}>
+          <button className="btn-secondary" onClick={handleSync} disabled={syncing}>
             {syncing ? 'Syncing...' : 'Sync with Sheet'}
           </button>
-          <button className="btn-schedule" onClick={() => navigate('/schedule')}>
+          <button className="btn-primary" onClick={() => navigate('/schedule')}>
             Schedule
           </button>
         </div>
@@ -280,7 +281,14 @@ export default function DraftsPage() {
       )}
 
       {filtered.length === 0 ? (
-        <div className="drafts-empty">No drafts to display.</div>
+        <EmptyState
+          icon="📝"
+          heading="No drafts yet"
+          description="Once you run a scan, AI-generated email drafts will appear here for review before sending."
+          actionLabel="Go to Scan"
+          onAction={() => navigate('/scan')}
+          tip="Drafts are created automatically based on website analysis and personalized for each contact."
+        />
       ) : (
         <div className="drafts-list">
           {filtered.map((draft) => (
@@ -315,8 +323,8 @@ export default function DraftsPage() {
                     placeholder="Email body"
                   />
                   <div className="draft-edit-actions">
-                    <button className="btn-save" onClick={saveEdit}>Save</button>
-                    <button className="btn-cancel" onClick={cancelEdit}>Cancel</button>
+                    <button className="btn-primary" onClick={saveEdit}>Save</button>
+                    <button className="btn-secondary" onClick={cancelEdit}>Cancel</button>
                   </div>
                 </div>
               ) : (
@@ -329,8 +337,8 @@ export default function DraftsPage() {
               <div className="draft-card-actions">
                 {editingId !== draft.id && (
                   <>
-                    <button onClick={() => startEdit(draft)}>Edit</button>
-                    <button onClick={() => handleCopyDraft(draft)}>Copy Draft</button>
+                    <button className="btn-secondary" onClick={() => startEdit(draft)}>Edit</button>
+                    <button className="btn-secondary" onClick={() => handleCopyDraft(draft)}>Copy Draft</button>
                   </>
                 )}
               </div>

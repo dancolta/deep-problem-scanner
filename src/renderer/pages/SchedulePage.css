@@ -34,9 +34,15 @@
 
 .config-grid {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr 1fr 1fr;
-  gap: 16px;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 20px 24px;
   align-items: start;
+}
+
+@media (min-width: 1400px) {
+  .config-grid {
+    grid-template-columns: 1fr 1fr 1fr 1.2fr 1.5fr;
+  }
 }
 
 .config-field label {
@@ -138,39 +144,16 @@
   margin-bottom: 20px;
 }
 
-.schedule-controls .btn {
+/* Controls use global btn-primary, btn-secondary, btn-destructive classes */
+.schedule-controls .btn-primary,
+.schedule-controls .btn-secondary,
+.schedule-controls .btn-destructive {
   padding: 8px 20px;
-  border: none;
-  border-radius: var(--radius-lg);
   font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: opacity 0.2s;
 }
 
-.schedule-controls .btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
-
-.schedule-controls .btn-start {
-  background: var(--success);
-  color: #fff;
-}
-
-.schedule-controls .btn-stop {
-  background: var(--danger);
-  color: #fff;
-}
-
-.schedule-controls .btn-refresh {
-  background: var(--bg-elevated-hover);
-  color: var(--text-primary);
+.schedule-controls .btn-secondary {
   margin-left: auto;
-}
-
-.schedule-controls .btn-refresh:hover {
-  background: var(--bg-surface);
 }
 
 .status-indicator {
@@ -371,6 +354,21 @@
   font-size: 0.85rem;
 }
 
+/* Activity log empty state (inline style) */
+.activity-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--text-tertiary);
+  font-size: 0.85rem;
+}
+
+.activity-empty-icon {
+  font-size: 1.2rem;
+}
+
 .error-banner {
   background: var(--danger-subtle);
   color: var(--danger-text);
@@ -394,29 +392,32 @@
 
 /* Interval Range Inputs */
 .config-field--interval-range {
-  grid-column: span 2;
+  min-width: 180px;
 }
 
 .interval-range-inputs {
   display: flex;
-  gap: 16px;
+  gap: 12px;
 }
 
 .interval-input-group {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   flex: 1;
+  min-width: 0;
 }
 
 .interval-input-group .interval-label {
   font-size: 0.75rem;
   color: var(--text-tertiary);
-  min-width: 28px;
+  flex-shrink: 0;
 }
 
 .interval-input-group input[type="number"] {
   flex: 1;
+  min-width: 50px;
+  max-width: 80px;
   padding: 8px 10px;
   background: var(--bg-input);
   border: 1px solid var(--border-default);
@@ -484,14 +485,23 @@
    RESPONSIVE BREAKPOINTS
    ============================================ */
 
-/* Tablets and smaller desktops */
-@media (max-width: 1024px) {
+/* Medium desktops */
+@media (max-width: 1200px) {
   .config-grid {
     grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+}
+
+/* Tablets and smaller desktops */
+@media (max-width: 900px) {
+  .config-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 14px;
   }
 
   .config-field--interval-range {
-    grid-column: span 3;
+    grid-column: span 2;
   }
 }
 
