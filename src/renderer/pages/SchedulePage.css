@@ -21,17 +21,24 @@
 .stopped-banner {
   display: flex;
   align-items: center;
-  gap: 12px;
-  background: rgba(139, 148, 158, 0.1);
-  border: 1px solid rgba(139, 148, 158, 0.3);
+  gap: 14px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(245, 158, 11, 0.15) 100%);
+  border: 2px solid #EF4444;
   border-radius: var(--radius-lg);
-  padding: 14px 18px;
-  margin-bottom: 12px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  box-shadow: 0 0 20px rgba(239, 68, 68, 0.2);
 }
 
 .stopped-icon {
-  font-size: 1.2rem;
+  font-size: 1.5rem;
   flex-shrink: 0;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .stopped-content {
@@ -42,13 +49,14 @@
 }
 
 .stopped-content strong {
-  color: var(--text-secondary);
-  font-size: 0.95rem;
+  color: #EF4444;
+  font-size: 1rem;
+  font-weight: 600;
 }
 
 .stopped-hint {
-  color: var(--text-tertiary);
-  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
 }
 
 /* Warning Banner */

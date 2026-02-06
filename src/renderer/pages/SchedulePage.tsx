@@ -307,10 +307,10 @@ export default function SchedulePage() {
       {/* Campaign stopped banner */}
       {schedulerStatus !== 'running' && pendingCount > 0 && (
         <div className="stopped-banner">
-          <span className="stopped-icon">⏸</span>
+          <span className="stopped-icon">🔴</span>
           <div className="stopped-content">
-            <strong>Campaign is not running</strong>
-            <span className="stopped-hint">Click "Start Sending" to begin sending {pendingCount} pending email{pendingCount > 1 ? 's' : ''}</span>
+            <strong>CAMPAIGN STOPPED</strong>
+            <span className="stopped-hint">Click "Start Sending" to send {pendingCount} pending email{pendingCount > 1 ? 's' : ''}</span>
           </div>
         </div>
       )}
