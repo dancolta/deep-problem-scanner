@@ -264,6 +264,20 @@ export default function SchedulePage() {
   const pendingCount = emails.filter(e => e.email_status === 'draft' || e.email_status === 'scheduled').length;
   const failedCount = emails.filter(e => e.email_status === 'failed').length;
 
+  // Sort emails: scheduled/draft/approved at top, sent at bottom
+  const sortedEmails = [...emails].sort((a, b) => {
+    const statusOrder: Record<string, number> = {
+      'scheduled': 0,
+      'draft': 1,
+      'approved': 2,
+      'failed': 3,
+      'sent': 4,
+    };
+    const orderA = statusOrder[a.email_status || ''] ?? 2;
+    const orderB = statusOrder[b.email_status || ''] ?? 2;
+    return orderA - orderB;
+  });
+
   // Check for past-due scheduled emails
   const pastDueEmails = emails.filter(e => {
     if (e.email_status !== 'scheduled' || !e.scheduled_time) return false;
@@ -289,6 +303,17 @@ export default function SchedulePage() {
       <p className="page-subtitle">Monitor and control automated email delivery.</p>
 
       {displayError && <div className="error-banner">{displayError}</div>}
+
+      {/* Campaign stopped banner */}
+      {schedulerStatus !== 'running' && pendingCount > 0 && (
+        <div className="stopped-banner">
+          <span className="stopped-icon">⏸</span>
+          <div className="stopped-content">
+            <strong>Campaign is not running</strong>
+            <span className="stopped-hint">Click "Start Sending" to begin sending {pendingCount} pending email{pendingCount > 1 ? 's' : ''}</span>
+          </div>
+        </div>
+      )}
 
       {/* Past-due warning banner */}
       {hasPastDueEmails && (
@@ -491,7 +516,7 @@ export default function SchedulePage() {
               </tr>
             </thead>
             <tbody>
-              {emails.map((row, i) => (
+              {sortedEmails.map((row, i) => (
                 <tr key={i}>
                   <td>{i + 1}</td>
                   <td>{row.company_name}</td>
