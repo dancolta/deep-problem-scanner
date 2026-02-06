@@ -740,6 +740,23 @@ export function registerAllHandlers(): void {
               );
             }
 
+            // Mark lead as processed in source sheet (if imported from Google Sheets)
+            if (lead.sourceSpreadsheetId && lead.sourceRowNumber) {
+              try {
+                const authClient = await registry.googleAuth.getAuthenticatedClient();
+                const sourceImporter = new SheetsLeadImporter(authClient);
+                await sourceImporter.markAsProcessed(
+                  lead.sourceSpreadsheetId,
+                  lead.sourceRowNumber,
+                  lead.sourceSheetName
+                );
+                console.log(`[IPC] Marked row ${lead.sourceRowNumber} as processed in source sheet`);
+              } catch (markError) {
+                // Log but don't fail the scan - processed marking is best-effort
+                console.error(`[IPC] Failed to mark lead as processed:`, markError);
+              }
+            }
+
             results.push({
               lead,
               scanStatus: 'SUCCESS',

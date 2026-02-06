@@ -253,6 +253,17 @@ export class SheetsLeadImporter {
   }
 
   /**
+   * Mark a single lead as processed (convenience wrapper for markRowsAsProcessed).
+   */
+  async markAsProcessed(
+    spreadsheetId: string,
+    rowNumber: number,
+    sheetName?: string
+  ): Promise<{ success: boolean; markedCount: number; errors: string[] }> {
+    return this.markRowsAsProcessed(spreadsheetId, [rowNumber], sheetName);
+  }
+
+  /**
    * Get the name of the first sheet in the spreadsheet.
    */
   private async getFirstSheetName(spreadsheetId: string): Promise<string> {
