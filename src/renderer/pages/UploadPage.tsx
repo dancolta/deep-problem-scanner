@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { IPC_CHANNELS } from '../../shared/ipc-channels';
 import { Lead, ScanSource } from '../../shared/types';
@@ -70,6 +70,36 @@ export default function UploadPage() {
   }, [sheetsUrl]);
 
   const isValidSheetsUrl = Boolean(sheetsId) || (sheetsUrl.length > 20 && /^[a-zA-Z0-9_-]+$/.test(sheetsUrl));
+
+  // Load saved sheets URL on mount
+  useEffect(() => {
+    const loadSavedSheetsUrl = async () => {
+      try {
+        const response = await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_GET) as any;
+        const settings = response?.settings ?? response;
+        if (settings?.uploadSheetsUrl) {
+          setSheetsUrl(settings.uploadSheetsUrl);
+        }
+      } catch {
+        // Ignore errors loading settings
+      }
+    };
+    loadSavedSheetsUrl();
+  }, []);
+
+  // Save sheets URL to settings
+  const saveSheetsUrl = useCallback(async (url: string) => {
+    try {
+      const response = await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_GET) as any;
+      const current = response?.settings ?? response ?? {};
+      await window.electronAPI.invoke(IPC_CHANNELS.SETTINGS_SET, {
+        ...current,
+        uploadSheetsUrl: url,
+      });
+    } catch {
+      // Best-effort save
+    }
+  }, []);
 
   // Quick Scan URL validation and domain extraction
   const normalizeUrl = useCallback((url: string): string => {
@@ -185,7 +215,9 @@ export default function UploadPage() {
     // Reset validation review state
     setListCleared(false);
     setShowFlaggedLeads(false);
-  }, []);
+    // Clear saved URL
+    saveSheetsUrl('');
+  }, [saveSheetsUrl]);
 
   // Tab switch handler
   const handleTabSwitch = useCallback((newSource: ImportSource) => {
@@ -228,6 +260,9 @@ export default function UploadPage() {
         setSheetName(response.sheetName || null);
         setRangeEnd(Math.max(response.result.leads.length - 1, 0));
         setSheetsStatus('connected');
+
+        // Save the URL for next time
+        saveSheetsUrl(sheetsUrl);
 
         // Show debug info if no leads were matched
         if (response.result.leads.length === 0 && response.debug) {
