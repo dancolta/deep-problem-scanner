@@ -141,8 +141,8 @@ export class EmailGenerator {
   private normalizeImageSpacing(body: string): string {
     // Replace any whitespace before [IMAGE] with single newline
     body = body.replace(/\n\s*\n\s*\[IMAGE\]/g, '\n[IMAGE]');
-    // Replace any whitespace after [IMAGE] with double newline (one blank line)
-    body = body.replace(/\[IMAGE\]\s*\n?/g, '[IMAGE]\n\n');
+    // Replace any whitespace after [IMAGE] with single newline (CTA starts right after)
+    body = body.replace(/\[IMAGE\]\s*\n*/g, '[IMAGE]\n');
     // Clean up any triple+ newlines that might result
     body = body.replace(/\n{3,}/g, '\n\n');
     return body.trim();
@@ -210,7 +210,6 @@ ${introText}
 
 Also, your hero section has some ${issueWord} I've flagged below:
 [IMAGE]
-
 ${cta}`;
 
     return {

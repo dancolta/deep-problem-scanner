@@ -115,12 +115,12 @@ BODY RULES:
 
 SPACING RULES:
 - After [TRANSITION_SENTENCE] → single newline → [IMAGE] (NO blank line between text and image)
-- After [IMAGE] → blank line → CTA (one blank line after image)
+- After [IMAGE] → single newline → CTA (NO blank line, CTA starts right after image)
 
 FORMAT: Respond ONLY with valid JSON:
 {
   "subject": "your subject line",
-  "body": "Hi {{firstName}},\\n\\n[Your intro sentence here]\\n\\n[TRANSITION_SENTENCE]\\n[IMAGE]\\n\\n{{cta}}"
+  "body": "Hi {{firstName}},\\n\\n[Your intro sentence here]\\n\\n[TRANSITION_SENTENCE]\\n[IMAGE]\\n{{cta}}"
 }`;
 
 /**

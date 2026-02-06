@@ -71,6 +71,28 @@ export default function UploadPage() {
 
   const isValidSheetsUrl = Boolean(sheetsId) || (sheetsUrl.length > 20 && /^[a-zA-Z0-9_-]+$/.test(sheetsUrl));
 
+  // Compute row number bounds for range selection (Google Sheets vs CSV)
+  const hasSourceRows = useMemo(() =>
+    parseResult?.leads.some(l => l.sourceRowNumber !== undefined) ?? false,
+    [parseResult]
+  );
+
+  const minRowNumber = useMemo(() => {
+    if (!parseResult || parseResult.leads.length === 0) return 1;
+    if (hasSourceRows) {
+      return Math.min(...parseResult.leads.map(l => l.sourceRowNumber ?? Infinity));
+    }
+    return 1; // CSV: 1-based index
+  }, [parseResult, hasSourceRows]);
+
+  const maxRowNumber = useMemo(() => {
+    if (!parseResult || parseResult.leads.length === 0) return 1;
+    if (hasSourceRows) {
+      return Math.max(...parseResult.leads.map(l => l.sourceRowNumber ?? 0));
+    }
+    return parseResult.leads.length; // CSV: 1-based index
+  }, [parseResult, hasSourceRows]);
+
   // Load saved sheets URL on mount
   useEffect(() => {
     const loadSavedSheetsUrl = async () => {
@@ -152,7 +174,9 @@ export default function UploadPage() {
 
       if (response.success && response.result) {
         setParseResult(response.result);
-        setRangeEnd(Math.max(response.result.leads.length - 1, 0));
+        // Range will be set by useMemo after parseResult updates
+        setRangeStart('');
+        setRangeEnd('');
       } else {
         setParseError(response.error || 'Failed to parse lead list.');
       }
@@ -258,7 +282,9 @@ export default function UploadPage() {
       if (response.success && response.result) {
         setParseResult(response.result);
         setSheetName(response.sheetName || null);
-        setRangeEnd(Math.max(response.result.leads.length - 1, 0));
+        // Range will be set by useMemo after parseResult updates
+        setRangeStart('');
+        setRangeEnd('');
         setSheetsStatus('connected');
 
         // Save the URL for next time
@@ -343,10 +369,22 @@ export default function UploadPage() {
   const getLeadsToScan = useCallback((): Lead[] => {
     if (!parseResult) return [];
     if (scanAll) return parseResult.leads;
-    const start = rangeStart === '' ? 0 : rangeStart;
-    const end = rangeEnd === '' ? parseResult.leads.length - 1 : rangeEnd;
-    return parseResult.leads.slice(start, end + 1);
-  }, [parseResult, scanAll, rangeStart, rangeEnd]);
+
+    const start = rangeStart === '' ? minRowNumber : rangeStart;
+    const end = rangeEnd === '' ? maxRowNumber : rangeEnd;
+
+    if (hasSourceRows) {
+      // Filter by actual Google Sheet row number
+      return parseResult.leads.filter(lead =>
+        lead.sourceRowNumber !== undefined &&
+        lead.sourceRowNumber >= start &&
+        lead.sourceRowNumber <= end
+      );
+    } else {
+      // CSV fallback: treat as 1-based row numbers, convert to 0-based indices
+      return parseResult.leads.slice(start - 1, end);
+    }
+  }, [parseResult, scanAll, rangeStart, rangeEnd, hasSourceRows, minRowNumber, maxRowNumber]);
 
   const getDisplayLeads = useCallback((): Lead[] => {
     const leads = getLeadsToScan();
@@ -691,7 +729,7 @@ export default function UploadPage() {
             <tbody>
               {getDisplayLeads().map((lead, i) => (
                 <tr key={i}>
-                  <td>{i + 1 + (scanAll ? 0 : (rangeStart || 0))}</td>
+                  <td>{lead.sourceRowNumber ?? (i + 1)}</td>
                   <td>{lead.company_name}</td>
                   <td className="url-cell">{lead.website_url}</td>
                   <td>{lead.contact_name}</td>
@@ -722,9 +760,9 @@ export default function UploadPage() {
                 <label>Start row</label>
                 <input
                   type="number"
-                  value={rangeStart}
-                  min={0}
-                  max={parseResult.leads.length - 1}
+                  value={rangeStart === '' ? minRowNumber : rangeStart}
+                  min={minRowNumber}
+                  max={maxRowNumber}
                   onChange={(e) => {
                     const val = e.target.value;
                     setRangeStart(val === '' ? '' : parseInt(val));
@@ -737,8 +775,9 @@ export default function UploadPage() {
                 <input
                   type="number"
                   value={rangeEnd}
-                  min={rangeStart === '' ? 0 : rangeStart}
-                  max={parseResult.leads.length - 1}
+                  placeholder={String(maxRowNumber)}
+                  min={rangeStart === '' ? minRowNumber : rangeStart}
+                  max={maxRowNumber}
                   onChange={(e) => {
                     const val = e.target.value;
                     setRangeEnd(val === '' ? '' : parseInt(val));
@@ -746,7 +785,7 @@ export default function UploadPage() {
                   className="input input--small"
                 />
               </div>
-              <p className="range-count">Will scan {Math.max((rangeEnd === '' ? 0 : rangeEnd) - (rangeStart === '' ? 0 : rangeStart) + 1, 0)} leads</p>
+              <p className="range-count">Will scan {getLeadsToScan().length} leads (rows {rangeStart === '' ? minRowNumber : rangeStart}–{rangeEnd === '' ? maxRowNumber : rangeEnd})</p>
             </div>
           )}
         </div>
