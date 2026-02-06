@@ -1135,34 +1135,52 @@ export function registerAllHandlers(): void {
         // Check if this was previously scheduled
         if (row.email_status === 'scheduled' && row.scheduled_time) {
           // Try to parse the existing scheduled time
-          // Format is like "2024-02-05|18:00:00 (Bucharest)" - extract the datetime part
-          const timeMatch = row.scheduled_time.match(/^(\d{4}-\d{2}-\d{2})\|(\d{2}:\d{2}:\d{2})/);
-          if (timeMatch) {
-            const existingDateTime = new Date(`${timeMatch[1]}T${timeMatch[2]}`);
+          // Format is like "2026-02-06 10:30 (London)|ISO:2026-02-06T10:30:00.000Z"
+          // Extract the ISO timestamp at the end for precise parsing
+          const isoMatch = row.scheduled_time.match(/\|ISO:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/);
+          if (isoMatch) {
+            const existingDateTime = new Date(isoMatch[1]);
             const existingTimeMs = existingDateTime.getTime();
 
-            if (existingTimeMs > Date.now()) {
+            if (!isNaN(existingTimeMs) && existingTimeMs > Date.now()) {
               // Scheduled time is still in the future - use it
               scheduledTimeMs = existingTimeMs;
               console.log(`[IPC] Email ${index}: ${row.company_name} -> RESTORED existing schedule at ${row.scheduled_time}`);
-            } else {
+            } else if (!isNaN(existingTimeMs)) {
               // Scheduled time has passed - reschedule for next business hours
               scheduledTimeMs = getNextBusinessHoursTime(timezone, rescheduledCount, getRandomInterval(minIntervalMinutes, maxIntervalMinutes));
               rescheduledCount++;
               isRescheduled = true;
               console.log(`[IPC] Email ${index}: ${row.company_name} -> RESCHEDULED (was ${row.scheduled_time}, now ${new Date(scheduledTimeMs).toISOString()})`);
+            } else {
+              // Parsing failed - treat as new
+              console.log(`[IPC] Email ${index}: ${row.company_name} -> PARSE FAILED, treating as new`);
+              scheduledTimeMs = currentScheduledTime;
             }
           } else {
-            // Couldn't parse existing time - treat as new
-            scheduledTimeMs = currentScheduledTime;
+            // Couldn't find ISO timestamp - try legacy format
+            const legacyMatch = row.scheduled_time.match(/^(\d{4}-\d{2}-\d{2})[|\s](\d{2}:\d{2})/);
+            if (legacyMatch) {
+              const existingDateTime = new Date(`${legacyMatch[1]}T${legacyMatch[2]}:00`);
+              const existingTimeMs = existingDateTime.getTime();
+              if (!isNaN(existingTimeMs) && existingTimeMs > Date.now()) {
+                scheduledTimeMs = existingTimeMs;
+                console.log(`[IPC] Email ${index}: ${row.company_name} -> RESTORED from legacy format at ${row.scheduled_time}`);
+              } else {
+                scheduledTimeMs = currentScheduledTime;
+              }
+            } else {
+              // Couldn't parse - treat as new
+              scheduledTimeMs = currentScheduledTime;
+            }
           }
         } else {
-          // New draft - use normal scheduling
-          if (index > 0) {
-            const randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
-            currentScheduledTime += randomInterval * 60_000;
-          }
+          // New draft (status is 'draft' or 'approved') - use normal scheduling
+          // Each new email gets scheduled with a random interval from the previous one
+          const randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
+          currentScheduledTime += randomInterval * 60_000;
           scheduledTimeMs = currentScheduledTime;
+          console.log(`[IPC] Email ${index}: ${row.company_name} -> NEW scheduling at offset +${randomInterval}min`);
         }
 
         const scheduledTime = new Date(scheduledTimeMs);
