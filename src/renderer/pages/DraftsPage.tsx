@@ -135,8 +135,13 @@ export default function DraftsPage() {
   }, [loadFromSheet]);
 
   const filtered = useMemo(() => {
-    if (filter === 'all') return drafts;
-    return drafts.filter((d) => d.status === filter);
+    const list = filter === 'all' ? drafts : drafts.filter((d) => d.status === filter);
+    // Sort: unsent (draft, approved, scheduled, rejected, failed) first, then sent
+    return [...list].sort((a, b) => {
+      const aIsSent = a.status === 'sent' ? 1 : 0;
+      const bIsSent = b.status === 'sent' ? 1 : 0;
+      return aIsSent - bIsSent;
+    });
   }, [drafts, filter]);
 
   const updateSheetRow = useCallback(
