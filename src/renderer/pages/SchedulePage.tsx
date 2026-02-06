@@ -264,6 +264,23 @@ export default function SchedulePage() {
   const pendingCount = emails.filter(e => e.email_status === 'draft' || e.email_status === 'scheduled').length;
   const failedCount = emails.filter(e => e.email_status === 'failed').length;
 
+  // Check for past-due scheduled emails
+  const pastDueEmails = emails.filter(e => {
+    if (e.email_status !== 'scheduled' || !e.scheduled_time) return false;
+    try {
+      // Extract ISO timestamp if present
+      let dateToParse = e.scheduled_time;
+      if (e.scheduled_time.includes('|ISO:')) {
+        dateToParse = e.scheduled_time.split('|ISO:')[1];
+      }
+      const scheduledDate = new Date(dateToParse);
+      return !isNaN(scheduledDate.getTime()) && scheduledDate < new Date();
+    } catch {
+      return false;
+    }
+  });
+  const hasPastDueEmails = pastDueEmails.length > 0 && schedulerStatus !== 'running';
+
   const displayError = settingsError || sheetError;
 
   return (
@@ -272,6 +289,20 @@ export default function SchedulePage() {
       <p className="page-subtitle">Monitor and control automated email delivery.</p>
 
       {displayError && <div className="error-banner">{displayError}</div>}
+
+      {/* Past-due warning banner */}
+      {hasPastDueEmails && (
+        <div className="warning-banner">
+          <span className="warning-icon">⚠️</span>
+          <div className="warning-content">
+            <strong>{pastDueEmails.length} email{pastDueEmails.length > 1 ? 's' : ''} past scheduled time</strong>
+            <p>
+              The scheduler stops when the app is closed. Click <strong>"Start Sending"</strong> to resume -
+              past-due emails will be rescheduled automatically.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Schedule Configuration */}
       <div className="schedule-config">

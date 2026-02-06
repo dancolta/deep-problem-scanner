@@ -17,6 +17,49 @@
   font-size: 0.9rem;
 }
 
+/* Warning Banner */
+.warning-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: var(--radius-lg);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+}
+
+.warning-icon {
+  font-size: 1.2rem;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.warning-content {
+  flex: 1;
+}
+
+.warning-content strong {
+  color: #F59E0B;
+  font-size: 0.95rem;
+  display: block;
+  margin-bottom: 4px;
+}
+
+.warning-content p {
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.warning-content p strong {
+  color: var(--text-primary);
+  display: inline;
+  font-size: inherit;
+  margin: 0;
+}
+
 /* Schedule Configuration */
 .schedule-config {
   background: var(--bg-elevated);

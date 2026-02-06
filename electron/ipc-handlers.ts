@@ -1134,45 +1134,80 @@ export function registerAllHandlers(): void {
 
         // Check if this was previously scheduled
         if (row.email_status === 'scheduled' && row.scheduled_time) {
+          console.log(`[IPC] Email ${index}: ${row.company_name} -> Parsing scheduled_time: "${row.scheduled_time}"`);
+
           // Try to parse the existing scheduled time
           // Format is like "2026-02-06 10:30 (London)|ISO:2026-02-06T10:30:00.000Z"
-          // Extract the ISO timestamp at the end for precise parsing
-          const isoMatch = row.scheduled_time.match(/\|ISO:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/);
-          if (isoMatch) {
-            const existingDateTime = new Date(isoMatch[1]);
-            const existingTimeMs = existingDateTime.getTime();
+          // But ISO part may be truncated in Google Sheets, so try human-readable first
 
-            if (!isNaN(existingTimeMs) && existingTimeMs > Date.now()) {
+          // First try: Parse human-readable date/time at the start (most reliable)
+          // Matches: "2026-02-06 10:30" or "2026-02-06, 10:30"
+          const humanMatch = row.scheduled_time.match(/^(\d{4}-\d{2}-\d{2})[,\s]+(\d{2}):(\d{2})/);
+
+          let existingTimeMs: number | null = null;
+
+          if (humanMatch) {
+            // Parse as local time in the configured timezone
+            const [, dateStr, hour, minute] = humanMatch;
+            const dateTimeStr = `${dateStr}T${hour}:${minute}:00`;
+
+            // Convert from target timezone to UTC
+            const localDate = new Date(dateTimeStr);
+            const formatter = new Intl.DateTimeFormat('en-US', {
+              timeZone: timezone,
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit',
+              hour12: false,
+            });
+            const localFormatter = new Intl.DateTimeFormat('en-US', {
+              year: 'numeric', month: '2-digit', day: '2-digit',
+              hour: '2-digit', minute: '2-digit',
+              hour12: false,
+            });
+
+            const refTime = new Date();
+            const targetParts = formatter.formatToParts(refTime);
+            const localParts = localFormatter.formatToParts(refTime);
+
+            const getMinutes = (parts: Intl.DateTimeFormatPart[]) => {
+              const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0');
+              const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0');
+              return h * 60 + m;
+            };
+
+            const offsetMins = getMinutes(localParts) - getMinutes(targetParts);
+            existingTimeMs = localDate.getTime() + (offsetMins * 60_000);
+            console.log(`[IPC] Email ${index}: Parsed human-readable time: ${dateTimeStr} in ${timezone} -> ${new Date(existingTimeMs).toISOString()}`);
+          }
+
+          // Fallback: Try ISO timestamp if present
+          if (existingTimeMs === null) {
+            const isoMatch = row.scheduled_time.match(/\|ISO:(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z?)/);
+            if (isoMatch) {
+              const existingDateTime = new Date(isoMatch[1]);
+              existingTimeMs = existingDateTime.getTime();
+              console.log(`[IPC] Email ${index}: Parsed ISO time: ${isoMatch[1]} -> ${existingTimeMs}`);
+            }
+          }
+
+          if (existingTimeMs !== null && !isNaN(existingTimeMs)) {
+            if (existingTimeMs > Date.now()) {
               // Scheduled time is still in the future - use it
               scheduledTimeMs = existingTimeMs;
-              console.log(`[IPC] Email ${index}: ${row.company_name} -> RESTORED existing schedule at ${row.scheduled_time}`);
-            } else if (!isNaN(existingTimeMs)) {
+              console.log(`[IPC] Email ${index}: ${row.company_name} -> RESTORED at ${new Date(scheduledTimeMs).toISOString()} (${Math.round((existingTimeMs - Date.now()) / 60000)}min from now)`);
+            } else {
               // Scheduled time has passed - reschedule for next business hours
               scheduledTimeMs = getNextBusinessHoursTime(timezone, rescheduledCount, getRandomInterval(minIntervalMinutes, maxIntervalMinutes));
               rescheduledCount++;
               isRescheduled = true;
               console.log(`[IPC] Email ${index}: ${row.company_name} -> RESCHEDULED (was ${row.scheduled_time}, now ${new Date(scheduledTimeMs).toISOString()})`);
-            } else {
-              // Parsing failed - treat as new
-              console.log(`[IPC] Email ${index}: ${row.company_name} -> PARSE FAILED, treating as new`);
-              scheduledTimeMs = currentScheduledTime;
             }
           } else {
-            // Couldn't find ISO timestamp - try legacy format
-            const legacyMatch = row.scheduled_time.match(/^(\d{4}-\d{2}-\d{2})[|\s](\d{2}:\d{2})/);
-            if (legacyMatch) {
-              const existingDateTime = new Date(`${legacyMatch[1]}T${legacyMatch[2]}:00`);
-              const existingTimeMs = existingDateTime.getTime();
-              if (!isNaN(existingTimeMs) && existingTimeMs > Date.now()) {
-                scheduledTimeMs = existingTimeMs;
-                console.log(`[IPC] Email ${index}: ${row.company_name} -> RESTORED from legacy format at ${row.scheduled_time}`);
-              } else {
-                scheduledTimeMs = currentScheduledTime;
-              }
-            } else {
-              // Couldn't parse - treat as new
-              scheduledTimeMs = currentScheduledTime;
-            }
+            // Couldn't parse - treat as new
+            console.log(`[IPC] Email ${index}: ${row.company_name} -> PARSE FAILED (no valid time found), treating as new`);
+            const randomInterval = getRandomInterval(minIntervalMinutes, maxIntervalMinutes);
+            currentScheduledTime += randomInterval * 60_000;
+            scheduledTimeMs = currentScheduledTime;
           }
         } else {
           // New draft (status is 'draft' or 'approved') - use normal scheduling
